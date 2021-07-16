@@ -1,0 +1,51 @@
+1. Excluindo todos containers
+------------------------------
+docker container rm -f $(docker container ls -aq)
+
+2. Excluindo todas imagens
+---------------------------
+docker rmi -f $(docker images -q)
+
+3. Excluindo todos volumes
+---------------------------
+docker volume rm -f $(docker volume ls -q)
+
+4. Lista todos containers
+---------------------------
+docker container ls -a
+
+5. Lista todos volumes
+------------------------
+docker volume ls
+
+6. Criando volumes
+--------------------
+docker volume create mysqlDB01
+
+7. Listando o diretório local do host docker
+---------------------------------------------
+ls /var/lib/docker/volumes
+
+8. Criando uma imagem com o volume criado na passo anterior
+------------------------------------------------------------
+docker container run -d --name mysqlVOL01 -e MYSQL_ROOT_PASSWORD=senha -v mysqlDB01:/tmp/aulaVOLUME mysql
+
+9. Acessando o container
+-------------------------
+docker container exec -it mysqlVOL01 bash
+
+10. Listando os arquivos no container
+--------------------------------------
+ls -l /tmp/
+
+11. Criando arquivo de texto no container
+------------------------------------------
+cd aulaVOLUME/ && echo "Aprendendo sobre volumes" >> volumeDocker.txt
+
+12. Saia do container
+-----------------------
+exit ou ctrl + p + q
+
+13. Listando arquivos que foram criados no container
+------------------------------------------------------
+sudo ls -l /var/lib/docker/volumes/mysqlDB01/_data
