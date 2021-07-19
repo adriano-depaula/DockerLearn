@@ -1,0 +1,78 @@
+O que é um container docker?
+-----------------------------
+    Esse conceito precisa ser compreendido em partes. O container é um ambiente isolado. Já o docker é uma plataforma open source na linguagem de programação Go, que possui alto desempenho e é desenvolvida diretamente no Google.
+
+    Assim, o docker agrupa partes de softwares de um sistema de arquivo completo e que abrange todos os recursos necessários para a sua execução. Por isso, é uma plataforma de containers.
+
+    Fonte: https://www.meupositivo.com.br/panoramapositivo/container-docker/
+
+
+Imagens Docker
+----------------
+    Ao usar o Docker, um desenvolvedor cria um aplicativo ou serviço e empacota a ele e suas dependências em uma imagem de contêiner. Uma imagem é uma representação estática do aplicativo ou do serviço e de sua configuração e dependências.
+
+    Para executar o aplicativo ou o serviço, uma instância da imagem do aplicativo é criada para criar um contêiner, que estará em execução no host do Docker. Inicialmente, os contêineres são testados em um ambiente de desenvolvimento ou em um computador.
+
+    Fonte: https://docs.microsoft.com/pt-br/dotnet/architecture/microservices/container-docker-introduction/docker-containers-images-registries
+
+
+Docker Internals
+-----------------
+    O Docker usa namespaces do kernel para fornecer o espaço de trabalho isolado chamado de contêiner. Quando você executa um contêiner, o Docker cria um conjunto de namespaces para esse contêiner. Esses namespaces fornecem uma camada de isolamento. Cada aspecto de um contêiner é executado em um namespace separado e seu acesso é limitado a esse namespace.
+
+        O Docker Engine usa os seguintes namespaces no Linux:
+        ------------------------------------------------------
+            - Namespace PID para isolamento de processos.
+
+            - Namespace NET para gerenciamento de interfaces de rede.
+
+            - Namespace IPC para gerenciar o acesso aos recursos IPC.
+
+            - Namespace MNT para gerenciar pontos de montagem do sistema de arquivos.
+
+            - Namespace UTS para isolar kernel e identificadores de versão.
+
+    Cgroups
+    --------
+        O Docker também usa grupos de controle do kernel para alocação e isolamento de recursos. Um cgroup limita um aplicativo a um conjunto específico de recursos. Os grupos de controle permitem que o Docker Engine compartilhe os recursos de hardware disponíveis para contêineres e, opcionalmente, imponha limites e restrições.
+
+        O Docker Engine usa os seguintes cgroups:
+        ------------------------------------------
+             - Cgroup de memória para gerenciamento de contabilidade, limites e notificações.
+
+             - HugeTBL cgroup para contabilizar o uso de páginas enormes por grupo de processos.
+
+             - Grupo de CPU para gerenciar o tempo e o uso da CPU do usuário/sistema.
+
+             - CPUSet cgroup para vincular um grupo a uma CPU específica. Útil para aplicativos em tempo real e sistemas NUMA com memória localizada por CPU.
+
+            - BlkIO cgroup para medir e limitar a quantidade de blckIO por grupo.
+
+            - net_cls e net_prio cgroup para marcar o controle de tráfego.
+
+            - Dispositivos cgroup para dispositivos de acesso de leitura / gravação.
+
+             - Freezer cgroup para congelar um grupo. Útil para agendamento de lote de cluster, migração de processo e depuração sem afetar o prtrace.
+
+
+    Union File Systems
+    -------------------
+        Os sistemas de arquivos Union operam criando camadas, tornando-os muito leves e rápidos. O Docker Engine usa UnionFS para fornecer os blocos de construção para contêineres. O Docker Engine pode usar várias variantes do UnionFS, incluindo AUFS, btrfs, vfs e devicemapper.
+
+    Container Format
+    -----------------
+        O Docker Engine combina os namespaces, grupos de controle e UnionFS em um wrapper chamado Container Format. O Container Format padrão é libcontainer.
+
+    Segurança
+    ----------
+        O Docker Engine usa os recursos do kernel AppArmor, Seccomp e Capabilities para fins de segurança.
+        ----------------------------------------------------------------------------------------------------
+            - O AppArmor permite restringir os recursos dos programas com perfis por programa.
+
+            - Seccomp usado para filtrar syscalls emitidos por um programa.
+
+            - Capacidades para realizar verificações de permissão.
+
+Fonte:
+-------
+    - https://medium.com/@BeNitinAgarwal/understanding-the-docker-internals-7ccb052ce9fe

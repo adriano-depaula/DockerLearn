@@ -1,51 +1,77 @@
+Gerenciar dados no Docker
+--------------------------
+    Por padrão, todos os arquivos criados dentro de um contêiner são armazenados em uma camada de contêiner gravável. Isso significa que:
+
+        - Os dados não persistem quando o contêiner não existe mais e pode ser difícil retirar os dados do contêiner se outro processo precisar deles.
+
+        - A camada gravável de um contêiner é firmemente acoplada à máquina host onde o contêiner está em execução. Você não pode mover facilmente os dados para outro lugar.
+
+        - Gravar na camada gravável de um contêiner requer um driver de armazenamento para gerenciar o sistema de arquivos. O driver de armazenamento fornece um sistema de arquivos de união, usando o kernel Linux. Essa abstração extra reduz o desempenho em comparação ao uso de volumes de dados, que gravam diretamente no sistema de arquivos do host.
+
+    O Docker tem duas opções de contêineres para armazenar arquivos na máquina host, de modo que os arquivos sejam mantidos mesmo depois que o contêiner parar volumes e pontos montage. Se você estiver executando o Docker no Linux, também pode usar uma montagem tmpfs. Se você estiver executando o Docker no Windows, também pode usar um pipe nomeado. 
+
+
+
 1. Excluindo todos containers
 ------------------------------
-docker container rm -f $(docker container ls -aq)
+    docker container rm -f $(docker container ls -aq)
 
 2. Excluindo todas imagens
 ---------------------------
-docker rmi -f $(docker images -q)
+    docker rmi -f $(docker images -q)
 
 3. Excluindo todos volumes
 ---------------------------
-docker volume rm -f $(docker volume ls -q)
+    docker volume rm -f $(docker volume ls -q)
 
 4. Lista todos containers
 ---------------------------
-docker container ls -a
+    $ docker container ls -a
 
 5. Lista todos volumes
 ------------------------
-docker volume ls
+    $ docker volume ls
 
 6. Criando volumes
 --------------------
-docker volume create mysqlDB01
+    $ docker volume create mysqlDB01
 
 7. Listando o diretório local do host docker
 ---------------------------------------------
-ls /var/lib/docker/volumes
+    $ ls /var/lib/docker/volumes
 
 8. Criando uma imagem com o volume criado na passo anterior
 ------------------------------------------------------------
-docker container run -d --name mysqlVOL01 -e MYSQL_ROOT_PASSWORD=senha -v mysqlDB01:/tmp/aulaVOLUME mysql
+    $ docker container run -d --name mysqlVOL01 -e MYSQL_ROOT_PASSWORD=senha -v mysqlDB01:/tmp/aulaVOLUME mysql
+    $ docker container run -d --name mysqlVOL01 -e MYSQL_ROOT_PASSWORD=senha -v mysqlDB01:/tmp/aulaVOLUME mysql
+    /home/CONTAINERs/VOLUMEs/mysqlVOL01
 
-9. Acessando o container
+9. Criando um container a partir de uma imagem Mysql mapeando um diretório específico do host docker no container docker
+------------------------------------------------------------------------------------------------------------------------
+    $ docker container run -d --name pgsql01 -p 5432:5432 --volumes-from dbdados -e POSTGRESQL_USER=docker -e POSTGRESQL_PASS=docker -e POSTGRESQL_DB=docker kamui/postgresql
+
+10. Criando um container a partir de uma imagem CentOS importando o volume de outro container docker para o container atual
+----------------------------------------------------------------------------------------------------------------------------
+    $ docker container run -d --name mysqlVOL01 -e MYSQL_ROOT_PASSWORD=senha -v /home/CONTAINERs/VOLUMEs/DBDados01:/DBDados01 mysql
+
+11. Acessando o container
 -------------------------
-docker container exec -it mysqlVOL01 bash
+    $ docker container exec -it mysqlVOL01 bash
 
 10. Listando os arquivos no container
 --------------------------------------
-ls -l /tmp/
+    $ ls -l /tmp/
 
 11. Criando arquivo de texto no container
 ------------------------------------------
-cd aulaVOLUME/ && echo "Aprendendo sobre volumes" >> volumeDocker.txt
+    $ cd aulaVOLUME/ && echo "Aprendendo sobre volumes" >> volumeDocker.txt
 
 12. Saia do container
 -----------------------
-exit ou ctrl + p + q
+    $ exit ou ctrl + p + q
 
 13. Listando arquivos que foram criados no container
 ------------------------------------------------------
-sudo ls -l /var/lib/docker/volumes/mysqlDB01/_data
+    $ sudo ls -l /var/lib/docker/volumes/mysqlDB01/_data
+
+    docker service create -d --name nfs-service --mount 'type=volume,source=nfsvolume,target=/DBDados01,volume-driver=local,volume-opt=type=nfs,volume-opt=device=:/home/CONTAINERs/VOLUMEs/DBDados01,volume-opt=o=addr=127.0.0.1' nginx:latest

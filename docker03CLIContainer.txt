@@ -1,0 +1,54 @@
+DOCKER CLI
+-----------
+    $ docker container run --name container01 hello-world
+    ----------------------------------------------------
+        - docker container run 
+        -----------------------
+             Execute um comando em um novo contêiner
+
+        - --name container01 
+        ---------------------
+            Atribuir um nome ao contêiner
+
+        - hello-world 
+        --------------
+            Imagem base para construção do container
+
+
+    $ docker container run -d --name container01 -p 8282:8282 -ti nginx /bin/bash
+    ------------------------------------------------------------------------------
+        - docker container run
+        ----------------------- 
+            Execute um comando em um novo contêiner
+
+        - --name nomeDoContainer 
+        -------------------------
+            Atribuir um nome ao contêiner
+
+        - -d 
+        -----
+            Executa o container em segundo plano e mostra o seu nome ou ID
+
+        - -p 82828:8282 -p 8080:80
+        ------
+            Mapeia a porta do contêiner no host docker
+
+        - -it
+        ------
+            Executa comandos iterativos no container
+
+        - -e MYSQL_ROOT_PASSWORD=senhaMySql -e JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
+        -----
+            Configura variáveis de ambiente
+
+        - ubuntu 
+        ---------
+            imagem base para construção do container
+
+        - /bin/bash
+        ------------
+            Abre no container um terminal bash executado iterativamente
+
+
+    Fonte:
+        https://hub.docker.com/_/mysql
