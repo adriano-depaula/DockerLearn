@@ -1,0 +1,13 @@
+version: '2.2'
+services:
+  db:
+    image: postgres
+  web:
+    build: .
+    volumes:
+      - .:/code
+    command: python manage.py runserver
+    ports:
+      - "8000:5000"
+    depends_on:
+      - db

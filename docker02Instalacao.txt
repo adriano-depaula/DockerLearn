@@ -93,11 +93,59 @@ INSTALAÇÃO DOCKER UBUNTU
 
     Se você executou inicialmente comandos Docker CLI usando sudo antes de adicionar seu usuário ao grupo docker, poderá ver o seguinte erro, que indica que seu diretório ~/.docker/ foi criado com permissões incorretas devido aos comandos sudo.
     ----------------------------------------------------------------------------------------------------------------------------
-        $ sudo chown "$USER":"docker" /home/"$USER"/.docker -R && sudo chmod g+rwx "$HOME/.docker" -R
+        $ sudo chown "$USER":"docker" /home/"$USER"/.docker -R && sudo chmod g+rwx "$HOME/.docker" -R   
 
 Fonte:
 ------
     - https://docs.docker.com/engine/install/ubuntu/
 
     - https://docs.docker.com/engine/install/linux-postinstall/
+
+
+Instalação de Docker no Alma Linux 8.4
+---------------------------------------
+
+    - No momento desta escrita 12-08-2021, a coisa mais próxima que temos para um repositório de Docker para Almalinux é aquele feito para os Centos. Podemos adicionar o repositório de Docker ao nosso sistema com o seguinte comando.
+
+        $ sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+
+    - Antes de começarmos a instalar o Docker, precisamos remover os pacotes do podman e buildah do nosso sistema, à medida que entram em conflito com o Docker e o inibirão de ser instalado.
+
+        $ sudo dnf remove podman buildah
+
+
+    - Finalmente, podemos instalar os três pacotes de Docker que precisaremos executando o seguinte comando.
+
+        $ sudo dnf install docker-ce docker-ce-cli containerd.io
+
+
+    - Depois que a instalação estiver concluída, inicie o serviço de Docker e, opcionalmente, ative-o a ser executado sempre que o sistema for reinicializado:
+
+        $ sudo systemctl enable --now docker
+
+
+    - Você pode verificar se o Docker está instalado e reunir algumas informações sobre a versão atual digitando esse comando:
+
+        $ sudo docker version
+
+
+    - Há também uma maneira rápida e fácil de ver quantos contêineres de encaixe estão em execução e consulte algumas das opções configuradas do Docker, inserindo:
+
+        $ sudo docker info
+
+    Executando Docker sem sudo ou com o root
+    -----------------------------------------
+
+       - Por padrão, você terá que usar sudo ou login root a qualquer momento que você deseja executar um comando Docker. Esta próxima etapa é opcional, mas se você preferir a capacidade de executar o Docker como seu usuário atual, adicione sua conta ao grupo de Docker com este comando:
+
+            $ sudo usermod -aG docker $USER
+
+
+        - Você precisará reiniciar seu sistema para que essas alterações entrem em vigor.
+
+            $ reboot
+
+    sudo docker run -d -p 9000:9000 --name portainer --restart always -v /var/run/docker.sock:/var/run/docker.sock -v /home/CONTAINERs/Portainer/data:/data portainer/portainer
+
 

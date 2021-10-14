@@ -1,0 +1,161 @@
+Use a rede bridge padrão
+---------------------------
+    1. Abra uma janela de terminal. Liste as redes atuais antes de fazer qualquer outra coisa. Aqui está o que você deve ver se nunca adicionou uma rede ou inicializou um swarm neste daemon do Docker. Você pode ver redes diferentes, mas deve pelo menos ver estas (os IDs de rede serão diferentes):
+
+        $ docker network ls
+
+    A rede de bridge padrão é listada, junto com o host e nenhum. As duas últimas não são redes totalmente desenvolvidas, mas são usadas para iniciar um contêiner conectado diretamente à pilha de rede do host Docker daemon ou para iniciar um contêiner sem dispositivos de rede. Este tutorial conectará dois contêineres à rede bridge.
+
+
+    2. Inicie dois contêineres alpine executando ash, que é o shell padrão da Alpine em vez de bash. Os sinalizadores -dit significam iniciar o contêiner separado (em segundo plano), interativo (com a capacidade de digitar nele) e com um TTY (para que você possa ver a entrada e a saída). Como você o está iniciando desanexado, não será conectado ao contêiner imediatamente. Em vez disso, o ID do contêiner será impresso. Como você não especificou nenhum sinalizador --network, os contêineres se conectam à rede bridge padrão.
+
+        $ docker run -dit --name container01 alpine ash
+
+        $ docker run -dit --name container02 alpine ash
+
+    Verifique se os dois contêineres foram realmente iniciados:
+
+        $ docker network ls
+
+
+    3. Inspecione a rede bridge para ver quais contêineres estão conectados a ela.
+
+        $ docker network inspect bridge
+
+    Próximo ao topo, as informações sobre a rede bridge são listadas, incluindo o endereço IP do gateway entre o host Docker e a rede bridge (172.17.0.1). Na chave Containers, cada container conectado é listado, junto com informações sobre seu endereço IP (172.17.0.2 para container01 e 172.17.0.3 para container02).
+
+
+    4. Os contêineres estão sendo executados em segundo plano. Use o comando docker attach para conectar-se a container01.
+
+        $ docker container attach container01
+
+    O prompt muda para # para indicar que você é o usuário root no contêiner. Use o comando ip addr show para mostrar as interfaces de rede de container01 conforme aparecem no contêiner:
+
+        # ip addr show
+
+    A primeira interface é o dispositivo de loopback. Ignore por enquanto. Observe que a segunda interface tem o endereço IP 172.17.0.2, que é o mesmo endereço mostrado para container01 na etapa anterior.
+
+
+    5. No container01, verifique se você pode se conectar à Internet executando ping em google.com. O sinalizador -c 2 limita o comando a duas tentativas de ping.
+
+        # ping -c 2 google.com
+
+    6. Agora tente fazer ping no segundo contêiner. Primeiro, execute ping por seu endereço IP, 172.17.0.3:
+
+        # ping -c 3 172.17.0.3
+
+    Isso é bem-sucedido. Em seguida, tente executar ping no contêiner container02 pelo nome do contêiner. Isso vai falhar.
+
+        # ping -c 4 container02
+
+    7. Desanexar de container01 sem interrompê-lo usando a sequência de desanexação, CTRL + p CTRL + q (mantenha pressionada a tecla CTRL e digite p seguido de q). Se desejar, anexe a container02 e repita as etapas 4, 5 e 6 lá, substituindo container01 por container02.
+
+    8. Pare e remova os dois containers.
+
+        $ docker container rm -f $(docker container ls -a -q)
+
+    Lembre-se de que a rede Bridge padrão não é recomendada para produção. Para aprender sobre redes Bridge definidas pelo usuário, continue.
+
+
+
+Use redes bridge definidas pelo usuário
+------------------------------------------
+    Neste exemplo, começamos novamente dois contêineres alpine, mas os anexamos a uma rede definida pelo usuário chamada containers-net que já criamos. Esses contêineres não estão conectados à rede bridge padrão. Em seguida, iniciamos um terceiro contêiner alpine que está conectado à rede bridge, mas não conectado à rede containers-net, e um quarto contêiner alpine que está conectado a ambas as redes.
+
+        1. Crie a rede containers-net. Você não precisa do sinalizador bridge --driver, pois é o padrão, mas este exemplo mostra como especificá-lo.
+
+            $ docker network create --driver bridge containers-net
+
+        2. Listar redes do Docker:
+
+            $ docker network ls
+
+        Inspecione a rede containers-net. Isso mostra seu endereço IP e o fato de que nenhum contêiner está conectado a ela:
+
+            $ docker network inspect containers-net
+
+        Observe que o gateway desta rede é 172.18.0.1, ao contrário da rede bridge padrão, cujo gateway é 172.17.0.1. O endereço IP exato pode ser diferente em seu sistema.
+
+        3. Crie seus quatro contêineres. Observe os sinalizadores --network. Você só pode se conectar a uma rede durante o comando docker run, então você precisa usar docker network connect depois para conectar container04 à rede de bridge também.
+
+            $ docker run -dit --name container01 --network containers-net alpine ash
+
+            $ docker run -dit --name container02 --network containers-net alpine ash
+
+            $ docker run -dit --name container03 alpine ash
+
+            $ docker run -dit --name container04 --network containers-net alpine ash
+
+        Verifique se todos os contêineres estão em execução:
+
+            $ docker container ls
+    
+        4. Inspecione a rede bridge e a rede da rede containers-net novamente:
+
+            $ docker network inspect bridge
+
+        Os contêineres alpine3 e alpine4 são conectados à rede de bridge.
+
+            $ docker network inspect containers-net
+
+        Os contêineres container01, container02 e container04 estão conectados à rede containers-net.
+
+        5. Em redes definidas pelo usuário como containers-net, os contêineres podem não apenas se comunicar por endereço IP, mas também podem resolver um nome de contêiner para um endereço IP. Esse recurso é chamado de descoberta automática de serviço. Vamos nos conectar ao container01 e testar isso. container01 deve ser capaz de resolver alpine2 e alpine4 (e alpine1, ele mesmo) para endereços IP.
+
+            $ docker container attach container01
+
+            # ping -c 2 container02
+
+            # ping -c 2 container04
+
+            # ping -c 2 container01
+
+        6. No container01, você não deve ser capaz de se conectar ao container03, pois ele não está na rede container-net.
+
+            # ping -c 2 container03  
+
+        Não só isso, mas você também não pode se conectar a container03 a partir de container01 por seu endereço IP. Olhe novamente para a saída de inspeção da rede docker para a rede bridge e encontre o endereço IP do container03: 172.17.0.2 Tente fazer o ping.
+        
+        Desanexe container01 usando a sequência de desanexação, CTRL + p CTRL + q (mantenha pressionada a tecla CTRL e digite p seguido de q).
+
+       7. Lembre-se de que container04 está conectado à rede bridge padrão e à rede containers-net. Deve ser capaz de alcançar todos os outros containers. No entanto, você precisará endereçar container03 por seu endereço IP. Anexe a ele e execute os testes.
+
+            $ docker container attach container04
+
+            # ping -c 2 container01
+
+            # ping -c 2 container02
+
+            # ping -c 2 container03
+
+            # ping -c 2 172.17.0.2
+
+            # ping -c 2 container04
+
+        8. Como um teste final, certifique-se de que todos os seus contêineres possam se conectar à Internet executando o ping em google.com. Você já está vinculado ao container04, então comece tentando a partir daí. Em seguida, desconecte-se de container04 e conecte-se a container03 (que está conectado apenas à rede bridge) e tente novamente. Finalmente, conecte-se a container01 (que está conectado apenas à rede containers-net) e tente novamente.
+
+            # ping -c 2 google.com
+
+            CTRL+p CTRL+q
+
+            $ docker container attach container03
+
+            # ping -c 2 google.com
+
+            CTRL+p CTRL+q
+
+            $ docker container attach container01
+
+            # ping -c 2 google.com
+
+            CTRL+p CTRL+q
+
+        9. Pare e remova todos os contêineres e a rede de rede containers-net.
+
+            $ docker container rm -f $(docker container ls -a -q)
+
+            $ docker network rm containers-net
+
+Fontes:
+--------
+    https://docs.docker.com/network/network-tutorial-standalone/

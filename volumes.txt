@@ -76,6 +76,4 @@ Gerenciar dados no Docker
 
     docker service create -d --name nfs-service --mount 'type=volume,source=nfsvolume,target=/DBDados01,volume-driver=local,volume-opt=type=nfs,volume-opt=device=:/home/CONTAINERs/VOLUMEs/DBDados01,volume-opt=o=addr=127.0.0.1' nginx:latest
 
--p Mapeia portas do contêiner nas portas do host docker
-
--P Mapeia todas as portas aleatóriamente
+unless-stopped Semelhante a always, exceto que quando o contêiner é interrompido (manualmente ou de outra forma), ele não é reiniciado mesmo após o daemon do Docker ser reiniciado.
