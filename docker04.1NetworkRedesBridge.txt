@@ -69,6 +69,7 @@ Gerenciar uma Bridge definida pelo usuário
     
 Conecte um contêiner a uma Bridge definida pelo usuário
 ---------------------------------------------------------
+
     Ao criar um novo contêiner, você pode especificar um ou mais sinalizadores --network. Este exemplo conecta um contêiner Nginx à rede containers-net01. Ele também publica a porta 80 no contêiner para a porta 8080 no host Docker, para que os clientes externos possam acessar essa porta. Qualquer outro contêiner conectado à rede containers-net01 tem acesso a todas as portas do contêiner Nginx e vice-versa.
 
         $ docker container create --name container01Nginx --network containers-net01 --publish 8080:80 nginx:latest
@@ -83,6 +84,64 @@ Desconecte um contêiner de uma ponte definida pelo usuário
     Para desconectar um contêiner em execução de uma Bridge definida pelo usuário, use o comando docker network disconnect. O comando a seguir desconecta o contêiner container01Nginx da rede containers-net01.
 
         $ docker network disconnect containers-net01 container01Nginx
+
+
+Use IPv6
+---------------
+    Se precisar de suporte IPv6 para contêineres do Docker, você precisará habilitar a opção no daemon do Docker e recarregar sua configuração, antes de criar qualquer rede IPv6 ou atribuir endereços IPv6 aos contêineres.
+
+    Ao criar sua rede, você pode especificar o sinalizador --ipv6 para habilitar o IPv6. Você não pode desativar seletivamente o suporte IPv6 na rede Bridge padrão.
+
+
+Ative o encaminhamento de contêineres Docker para o mundo externo
+--------------------------------------------------------------------   
+    Por padrão, o tráfego de contêineres conectados à rede Bridge padrão não é encaminhado para o mundo externo. Para habilitar o encaminhamento, você precisa alterar duas configurações. Esses não são comandos do Docker e afetam o kernel do host do Docker.
+
+        1. Configure o kernel do Linux para permitir o encaminhamento de IP.
+
+            sysctl net.ipv4.conf.all.forwarding=1
+
+        2. Altere a política iptables FORWARD de DROP para ACCEPT.
+
+            sudo iptables -P FORWARD ACCEPT
+
+        Essas configurações não persistem durante uma reinicialização, portanto, pode ser necessário adicioná-las a um script de inicialização.
+
+
+Use a rede Bridge padrão
+----------------------------
+
+    A rede Bridge padrão é considerada um detalhe legado do Docker e não é recomendada para uso em produção. Configurá-lo é uma operação manual e apresenta deficiências técnicas.
+
+
+Conecte um contêiner à rede de ponte padrão
+--------------------------------------------- 
+
+    Se você não especificar uma rede usando o sinalizador --network e especificar um driver de rede, seu contêiner será conectado à rede Bridge padrão por padrão. Os contêineres conectados à rede Bridge padrão podem se comunicar, mas apenas por endereço IP, a menos que estejam vinculados usando o sinalizador --link legado.
+
+
+Configure a rede Bridge padrão
+-----------------------------------   
+
+    Para configurar a rede Bridge padrão, você especifica opções no daemon.json. Aqui está um exemplo daemon.json com várias opções especificadas. Especifique apenas as configurações que você precisa personalizar.
+
+        {
+            "bip": "192.168.1.5/24",
+            "fixed-cidr": "192.168.1.5/25",
+            "fixed-cidr-v6": "2001:db8::/64",
+            "mtu": 1500,
+            "default-gateway": "10.20.1.1",
+            "default-gateway-v6": "2001:db8:abcd::89",
+            "dns": ["10.20.1.2","10.20.1.3"]
+        }
+
+    Reinicie o Docker para que as alterações tenham efeito.
+
+
+Use IPv6 com a rede de ponte padrão
+--------------------------------------
+
+    Se você configurar o Docker para suporte a IPv6 (consulte Usar IPv6), a rede Bridge padrão também será configurada para IPv6 automaticamente. Ao contrário das Bridge definidas pelo usuário, você não pode desativar seletivamente o IPv6 na Bridge padrão.
 
 
 Fontes:

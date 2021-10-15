@@ -1,0 +1,93 @@
+Use redes Overlay
+---------------------------
+
+    O driver de rede Overlay cria uma rede distribuída entre vários hosts daemon do Docker. Essa rede fica no topo (sobrepõe) as redes específicas do host, permitindo que os contêineres conectados a ela (incluindo contêineres de serviço Swarm) se comuniquem com segurança quando a criptografia está habilitada. O Docker lida de forma transparente com o roteamento de cada pacote de e para o host daemon do Docker correto e o contêiner de destino correto.
+
+    Quando você inicializa um swarm ou une um host Docker a um swarm existente, duas novas redes são criadas nesse host Docker:
+
+        - uma rede Overlay chamada ingresso, que lida com o controle e o tráfego de dados relacionados aos serviços Swarm. Quando você cria um serviço swarm e não o conecta a uma rede Overlay definida pelo usuário, ele se conecta à rede ingress por padrão.
+
+        - uma rede de ponte chamada docker_gwbridge, que conecta o daemon individual do Docker aos outros daemons que participam do Swarm.
+
+    Você pode criar redes Overlay definidas pelo usuário usando a criação de rede docker, da mesma forma que pode criar redes de ponte definidas pelo usuário. Os serviços ou contêineres podem ser conectados a mais de uma rede ao mesmo tempo. Os serviços ou contêineres só podem se comunicar através das redes às quais cada um está conectado.
+
+    Embora você possa conectar os serviços swarm e os containers autônomos a uma rede overlay, os comportamentos padrão e as preocupações com a configuração são diferentes. Por esse motivo, o restante deste tópico é dividido em operações que se aplicam a todas as redes Overlay, aquelas que se aplicam a redes de serviço de enxame e aquelas que se aplicam a redes Overlay usadas por contêineres autônomos.
+
+
+Operações para todas as redes Overlay
+-------------------------------------------------
+
+    Pré-requisitos:
+
+        Regras de firewall para daemons do Docker usando redes Overlay
+
+        Você precisa das seguintes portas abertas para o tráfego de e para cada host Docker que participa de uma rede Overlay:
+
+        Porta TCP 2377 para comunicações de gerenciamento de cluster
+
+        Porta TCP e UDP 7946 para comunicação entre nós
+        
+        Porta UDP 4789 para tráfego de rede Overlay
+
+        Antes de criar uma rede Overlay, você precisa inicializar seu daemon do Docker como um gerenciador de swarm usando docker swarm init ou uni-lo a um swarm existente usando docker swarm join. Qualquer um deles cria a rede Overlay de ingresso padrão que é usada por serviços de enxame por padrão. Você precisa fazer isso mesmo que nunca planeje usar os serviços de enxame. Posteriormente, você pode criar redes Overlay adicionais definidas pelo usuário.
+
+    Para criar uma rede Overlay para uso com serviços swarm, use um comando como o seguinte:
+
+        docker network create -d overlay -d containers-overlay
+
+    Para criar uma rede Overlay que pode ser usada por swarm services ou contêineres autônomos para se comunicar com outros contêineres autônomos em execução em outros daemons do Docker, adicione o sinalizador --attachable:
+
+        docker network create -d overlay --attachable containers-overlay-anexado
+
+    Você pode especificar o intervalo de endereços IP, sub-rede, gateway e outras opções. Consulte docker network create --help para obter detalhes.
+
+
+Criptografar o tráfego em uma rede Overlay
+----------------------------------------------
+
+    Todo o tráfego de gerenciamento de serviço Swarm é criptografado por padrão, usando o algoritmo AES no modo GCM. Os nós de gerenciamento Swarm alternam a chave usada para criptografar os dados de fofoca a cada 12 horas.
+
+    Para criptografar os dados do aplicativo também, adicione --opt criptografado ao criar a rede Overlay. Isso permite a criptografia IPSEC no nível do vxlan. Essa criptografia impõe uma penalidade de desempenho não desprezível, portanto, você deve testar essa opção antes de usá-la na produção.
+
+    Quando você ativa a criptografia Overlay, o Docker cria túneis IPSEC entre todos os nós onde as tarefas são agendadas para serviços anexados à rede Overlay. Esses túneis também usam o algoritmo AES no modo GCM e os nós gerenciadores giram automaticamente as chaves a cada 12 horas.
+
+    Não conecte nós do Windows a redes Overlay criptografadas.
+
+    A criptografia de rede Overlay não é compatível com o Windows. Se um nó do Windows tentar se conectar a uma rede Overlay criptografada, nenhum erro será detectado, mas o nó não poderá se comunicar.
+
+
+Redes Overlay do modo Swarm e contêineres autônomos
+------------------------------------------------------
+
+    Você pode usar o recurso de rede Overlay com --opt criptografado --attachable e anexar contêineres não gerenciados a essa rede:
+
+        $ docker network create --opt encrypted --driver overlay --attachable containers-net-multiplos-host-anexados
+
+    
+Personalize a rede ingress padrão
+--------------------------------------
+
+    A maioria dos usuários nunca precisa configurar a rede ingress, mas o Docker permite que você faça isso. Isso pode ser útil se a sub-rede escolhida automaticamente entrar em conflito com uma que já existe em sua rede ou se você precisar personalizar outras configurações de rede de baixo nível, como a MTU.
+
+    Personalizar a rede ingress envolve removê-la e recriá-la. Isso geralmente é feito antes de você criar qualquer serviço no enxame. Se você tiver serviços existentes que publicam portas, esses serviços precisam ser removidos antes que você possa remover a rede ingress.
+
+    Durante o tempo em que não existe nenhuma rede ingress, os serviços existentes que não publicam portas continuam a funcionar, mas não têm balanceamento de carga. Isso afeta os serviços que publicam portas, como um serviço WordPress que publica a porta 80.
+
+        1. Inspecione a rede ingress usando a rede docker, inspecione a entrada e remova todos os serviços cujos contêineres estejam conectados a ela. Esses são serviços que publicam portas, como um serviço WordPress que publica a porta 80. Se todos esses serviços não forem interrompidos, a próxima etapa falhará.
+
+        2. Remova a rede ingress existente:
+
+            $ docker network rm ingress
+
+        3. Crie uma nova rede de sobreposição usando o sinalizador --ingress, junto com as opções personalizadas que deseja definir. Este exemplo define o MTU como 1200, define a sub-rede como 10.11.0.0/16 e define o gateway como 10.11.0.2.
+
+            $ docker network create --driver overlay --ingress --subnet=10.11.0.0/16 --gateway=10.11.0.2 --opt com.docker.network.driver.mtu=1200
+
+        Nota: Você pode nomear sua rede ingress com algo diferente ingress, mas você só pode ter uma. Uma tentativa de criar um segundo falha.
+
+        4. Reinicie os serviços que você interrompeu na primeira etapa.
+
+
+Fontes:
+----------
+    https://docs.docker.com/network/overlay/
