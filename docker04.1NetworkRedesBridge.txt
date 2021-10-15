@@ -1,0 +1,90 @@
+Use redes Bridge
+------------------
+    Em termos de rede, uma rede Bridge é um dispositivo de camada de link que encaminha o tráfego entre os segmentos de rede. Uma Bridge pode ser um dispositivo de hardware ou um dispositivo de software em execução no kernel de uma máquina host.
+
+    Em termos de Docker, uma rede Bridge usa uma software Bridge que permite que contêineres conectados à mesma rede Bridge se comuniquem, enquanto fornece isolamento de contêineres que não estão conectados a essa rede Bridge. O driver Bridge Docker instala automaticamente regras na máquina host para que os contêineres em redes Bridge diferentes não possam se comunicar diretamente entre si.
+
+    Redes Bridge se aplicam a contêineres em execução no mesmo host daemon do Docker. Para comunicação entre contêineres em execução em diferentes hosts daemon do Docker, você pode gerenciar o roteamento no nível do sistema operacional ou usar uma rede de sobreposição.
+
+    Quando você inicia o Docker, uma rede Bridge padrão (também chamada Bridge) é criada automaticamente e os contêineres recém-iniciados se conectam a ela, a menos que especificado de outra forma. Você também pode criar redes Bridge personalizadas definidas pelo usuário. As redes Bridge definidas pelo usuário são superiores à rede Bridge padrão.
+
+
+Diferenças entre as Bridges definidas pelo usuário e a Bridge padrão
+----------------------------------------------------------------------
+    
+    - As Bridge definidas pelo usuário fornecem resolução DNS automática entre contêineres.
+
+        Os contêineres na rede Bridge padrão só podem acessar uns aos outros por endereços IP, a menos que você use a opção --link, que é considerada legada. Em uma rede Bridge definida pelo usuário, os contêineres podem resolver uns aos outros por nome ou alias.
+
+        Imagine um aplicativo com um front-end web e um back-end de banco de dados. Se você chamar seus contêineres web e db, o contêiner web pode se conectar ao contêiner db em db, não importa em qual host Docker a pilha de aplicativos está sendo executada.
+
+        Se você executar a mesma pilha de aplicativos na rede de Bridge padrão, será necessário criar links manualmente entre os contêineres (usando o sinalizador --link legado). Esses links precisam ser criados em ambas as direções, então você pode ver que isso fica complexo com mais de dois contêineres que precisam se comunicar. Como alternativa, você pode manipular os arquivos /etc/hosts dentro dos contêineres, mas isso cria problemas que são difíceis de depurar.
+
+
+    - As pontes definidas pelo usuário fornecem melhor isolamento.
+    
+        Todos os contêineres sem um --network especificado são conectados à rede Bridge padrão. Isso pode ser um risco, pois pilhas / serviços / contêineres não relacionados são capazes de se comunicar.
+
+        O uso de uma rede definida pelo usuário fornece uma rede com escopo na qual apenas os contêineres conectados a essa rede podem se comunicar.
+
+
+    - Os contêineres podem ser conectados e desconectados de redes definidas pelo usuário imediatamente.
+
+        Durante a vida útil de um contêiner, você pode conectá-lo ou desconectá-lo de redes definidas pelo usuário imediatamente. Para remover um contêiner da rede Bridge padrão, você precisa parar o contêiner e recriá-lo com diferentes opções de rede.
+
+
+    - Cada rede definida pelo usuário cria uma Bridge configurável.
+
+        Se seus contêineres usam a rede bridge padrão, você pode configurá-la, mas todos os contêineres usam as mesmas configurações, como regras de MTU e iptables. Além disso, a configuração da rede Bridge padrão ocorre fora do próprio Docker e requer a reinicialização do Docker.
+
+        As redes bridge definidas pelo usuário são criadas e configuradas usando docker network create. Se diferentes grupos de aplicativos têm diferentes requisitos de rede, você pode configurar cada Bridge definida pelo usuário separadamente, conforme você a cria.
+
+
+    - Os contêineres vinculados na rede Bridge padrão compartilham variáveis de ambiente.
+
+        Originalmente, a única maneira de compartilhar variáveis de ambiente entre dois contêineres era vinculá-los usando o sinalizador --link. Este tipo de compartilhamento de variável não é possível com redes definidas pelo usuário. No entanto, existem maneiras superiores de compartilhar variáveis de ambiente. Algumas ideias:
+
+            - Vários contêineres podem montar um arquivo ou diretório contendo as informações compartilhadas, usando um volume Docker.
+
+            - Vários contêineres podem ser iniciados juntos usando docker-compose e o arquivo de composição pode definir as variáveis compartilhadas.
+
+            - Você pode usar serviços Swarm em vez de contêineres autônomos e aproveitar as vantagens de segredos e configurações compartilhados.
+
+        Os contêineres conectados à mesma rede Bridge definida pelo usuário expõem efetivamente todas as portas umas às outras. Para que uma porta seja acessível a contêineres ou hosts não Docker em redes diferentes, essa porta deve ser publicada usando o sinalizador -p ou --publish.
+
+
+Gerenciar uma Bridge definida pelo usuário
+--------------------------------------------
+
+    Use o comando docker network create para criar uma rede bridge definida pelo usuário.
+
+        $ docker network create containers-net01
+
+    Você pode especificar a sub-rede, o intervalo de endereços IP, o gateway e outras opções. Consulte a docker network create reference ou a saída de docker network create --help para obter detalhes.
+
+    Use o comando docker network rm para remover uma rede bridge definida pelo usuário. Se os contêineres estiverem atualmente conectados à rede, desconecte-os primeiro.
+
+        $ docker network rm containers-net01
+
+    
+Conecte um contêiner a uma Bridge definida pelo usuário
+---------------------------------------------------------
+    Ao criar um novo contêiner, você pode especificar um ou mais sinalizadores --network. Este exemplo conecta um contêiner Nginx à rede containers-net01. Ele também publica a porta 80 no contêiner para a porta 8080 no host Docker, para que os clientes externos possam acessar essa porta. Qualquer outro contêiner conectado à rede containers-net01 tem acesso a todas as portas do contêiner Nginx e vice-versa.
+
+        $ docker container create --name container01Nginx --network containers-net01 --publish 8080:80 nginx:latest
+
+    Para conectar um contêiner em execução a uma Bridge definida pelo usuário existente, use o comando docker network connect. O comando a seguir conecta um contêiner container01Nginx já em execução a uma rede containers-net01 já existente:
+
+        $ docker network connect containers-net01 container01Nginx
+
+    
+Desconecte um contêiner de uma ponte definida pelo usuário
+------------------------------------------------------------
+    Para desconectar um contêiner em execução de uma Bridge definida pelo usuário, use o comando docker network disconnect. O comando a seguir desconecta o contêiner container01Nginx da rede containers-net01.
+
+        $ docker network disconnect containers-net01 container01Nginx
+
+
+Fontes:
+---------
+    https://docs.docker.com/network/bridge/

@@ -57,7 +57,6 @@ Use a rede bridge padrão
     Lembre-se de que a rede Bridge padrão não é recomendada para produção. Para aprender sobre redes Bridge definidas pelo usuário, continue.
 
 
-
 Use redes bridge definidas pelo usuário
 ------------------------------------------
     Neste exemplo, começamos novamente dois contêineres alpine, mas os anexamos a uma rede definida pelo usuário chamada containers-net que já criamos. Esses contêineres não estão conectados à rede bridge padrão. Em seguida, iniciamos um terceiro contêiner alpine que está conectado à rede bridge, mas não conectado à rede containers-net, e um quarto contêiner alpine que está conectado a ambas as redes.

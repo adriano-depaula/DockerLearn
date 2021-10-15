@@ -1,0 +1,45 @@
+Visão geral da rede
+---------------------
+    Um dos motivos pelos quais os contêineres e serviços do Docker são tão poderosos é que você pode conectá-los ou conectá-los a cargas de trabalho não Docker. Os contêineres e serviços do Docker nem precisam estar cientes de que estão implantados no Docker ou se seus pares também são cargas de trabalho do Docker ou não. Quer seus hosts Docker executem Linux, Windows ou uma combinação dos dois, você pode usar o Docker para gerenciá-los de uma forma independente de plataforma.
+
+
+Escopo deste tópico
+---------------------
+    Este tópico não entra em detalhes específicos do sistema operacional sobre como as redes Docker funcionam, portanto, você não encontrará informações sobre como o Docker manipula as regras de iptables no Linux ou como ele manipula as regras de roteamento em servidores Windows, e não encontrará informações detalhadas sobre como o Docker forma e encapsula pacotes ou lida com criptografia. Consulte Docker e iptables.
+
+    Além disso, este tópico não fornece nenhum tutorial sobre como criar, gerenciar e usar redes Docker. Cada seção inclui links para tutoriais relevantes e referências de comando.
+
+
+Drivers de rede
+-----------------
+    O subsistema de rede do Docker é plugável, usando drivers. Vários drivers existem por padrão e fornecem funcionalidade de rede central:
+
+        bridge: O driver de rede padrão. Se você não especificar um driver, este é o tipo de rede que você está criando. As redes bridge geralmente são usadas quando seus aplicativos são executados em contêineres autônomos que precisam se comunicar.
+
+        host: para contêineres autônomos, remova o isolamento de rede entre o contêiner e o host Docker e use a rede do host diretamente.
+
+        overlay: as redes de overlay conectam vários daemons do Docker e permitem que os serviços Swarm se comuniquem uns com os outros. Você também pode usar redes de sobreposição para facilitar a comunicação entre um serviço swarm e um contêiner independente, ou entre dois contêineres independentes em diferentes daemons do Docker. Essa estratégia elimina a necessidade de fazer o roteamento no nível do sistema operacional entre esses contêineres.
+
+        macvlan: as redes Macvlan permitem que você atribua um endereço MAC a um contêiner, fazendo com que ele apareça como um dispositivo físico em sua rede. O daemon Docker roteia o tráfego para contêineres por meio de seus endereços MAC. Usar o driver macvlan às vezes é a melhor escolha ao lidar com aplicativos legados que esperam ser conectados diretamente à rede física, em vez de roteados pela pilha de rede do host Docker.
+
+        none: para este contêiner, desative todas as redes. Normalmente usado em conjunto com um driver de rede personalizado. None não está disponível para serviços Swarm.
+
+        Plug-ins de rede: você pode instalar e usar plug-ins de rede de terceiros com o Docker. Esses plug-ins estão disponíveis no Docker Hub ou em fornecedores terceirizados. Consulte a documentação do fornecedor para instalar e usar um determinado plug-in de rede.
+
+    
+    Resumo do driver de rede
+    --------------------------
+        - Redes bridge definidas pelo usuário são melhores quando você precisa de vários contêineres para se comunicar no mesmo host Docker.
+
+        - As redes de host são melhores quando a pilha de rede não deve ser isolada do host Docker, mas você deseja que outros aspectos do contêiner sejam isolados.
+
+        - Redes de sobreposição são melhores quando você precisa de contêineres em execução em diferentes hosts Docker para se comunicar ou quando vários aplicativos trabalham juntos usando serviços Swarm.
+
+        - As redes Macvlan são melhores quando você está migrando de uma configuração de VM ou precisa que seus contêineres se pareçam com hosts físicos em sua rede, cada um com um endereço MAC exclusivo.
+
+        - Plug-ins de rede de terceiros permitem que você integre o Docker a pilhas de rede especializadas.
+
+
+    Fontes:
+    ----------
+        https://docs.docker.com/network/
