@@ -7,11 +7,11 @@ Use redes Overlay
 
         - uma rede Overlay chamada ingresso, que lida com o controle e o tráfego de dados relacionados aos serviços Swarm. Quando você cria um serviço swarm e não o conecta a uma rede Overlay definida pelo usuário, ele se conecta à rede ingress por padrão.
 
-        - uma rede de ponte chamada docker_gwbridge, que conecta o daemon individual do Docker aos outros daemons que participam do Swarm.
+        - uma rede de Bridge chamada docker_gwbridge, que conecta o daemon individual do Docker aos outros daemons que participam do Swarm.
 
-    Você pode criar redes Overlay definidas pelo usuário usando a criação de rede docker, da mesma forma que pode criar redes de ponte definidas pelo usuário. Os serviços ou contêineres podem ser conectados a mais de uma rede ao mesmo tempo. Os serviços ou contêineres só podem se comunicar através das redes às quais cada um está conectado.
+    Você pode criar redes Overlay definidas pelo usuário usando a criação de rede docker, da mesma forma que pode criar redes de Bridge definidas pelo usuário. Os serviços ou contêineres podem ser conectados a mais de uma rede ao mesmo tempo. Os serviços ou contêineres só podem se comunicar através das redes às quais cada um está conectado.
 
-    Embora você possa conectar os serviços swarm e os containers autônomos a uma rede overlay, os comportamentos padrão e as preocupações com a configuração são diferentes. Por esse motivo, o restante deste tópico é dividido em operações que se aplicam a todas as redes Overlay, aquelas que se aplicam a redes de serviço de enxame e aquelas que se aplicam a redes Overlay usadas por contêineres autônomos.
+    Embora você possa conectar os serviços swarm e os containers autônomos a uma rede overlay, os comportamentos padrão e as preocupações com a configuração são diferentes. Por esse motivo, o restante deste tópico é dividido em operações que se aplicam a todas as redes Overlay, aquelas que se aplicam a redes de serviço de Swarm e aquelas que se aplicam a redes Overlay usadas por contêineres autônomos.
 
 
 Operações para todas as redes Overlay
@@ -29,7 +29,7 @@ Operações para todas as redes Overlay
         
         Porta UDP 4789 para tráfego de rede Overlay
 
-        Antes de criar uma rede Overlay, você precisa inicializar seu daemon do Docker como um gerenciador de swarm usando docker swarm init ou uni-lo a um swarm existente usando docker swarm join. Qualquer um deles cria a rede Overlay de ingresso padrão que é usada por serviços de enxame por padrão. Você precisa fazer isso mesmo que nunca planeje usar os serviços de enxame. Posteriormente, você pode criar redes Overlay adicionais definidas pelo usuário.
+        Antes de criar uma rede Overlay, você precisa inicializar seu daemon do Docker como um gerenciador de swarm usando docker swarm init ou uni-lo a um swarm existente usando docker swarm join. Qualquer um deles cria a rede Overlay de ingresso padrão que é usada por serviços de Swarm por padrão. Você precisa fazer isso mesmo que nunca planeje usar os serviços de Swarm. Posteriormente, você pode criar redes Overlay adicionais definidas pelo usuário.
 
     Para criar uma rede Overlay para uso com serviços swarm, use um comando como o seguinte:
 
@@ -69,7 +69,7 @@ Personalize a rede ingress padrão
 
     A maioria dos usuários nunca precisa configurar a rede ingress, mas o Docker permite que você faça isso. Isso pode ser útil se a sub-rede escolhida automaticamente entrar em conflito com uma que já existe em sua rede ou se você precisar personalizar outras configurações de rede de baixo nível, como a MTU.
 
-    Personalizar a rede ingress envolve removê-la e recriá-la. Isso geralmente é feito antes de você criar qualquer serviço no enxame. Se você tiver serviços existentes que publicam portas, esses serviços precisam ser removidos antes que você possa remover a rede ingress.
+    Personalizar a rede ingress envolve removê-la e recriá-la. Isso geralmente é feito antes de você criar qualquer serviço no Swarm. Se você tiver serviços existentes que publicam portas, esses serviços precisam ser removidos antes que você possa remover a rede ingress.
 
     Durante o tempo em que não existe nenhuma rede ingress, os serviços existentes que não publicam portas continuam a funcionar, mas não têm balanceamento de carga. Isso afeta os serviços que publicam portas, como um serviço WordPress que publica a porta 80.
 
@@ -79,7 +79,7 @@ Personalize a rede ingress padrão
 
             $ docker network rm ingress
 
-        3. Crie uma nova rede de sobreposição usando o sinalizador --ingress, junto com as opções personalizadas que deseja definir. Este exemplo define o MTU como 1200, define a sub-rede como 10.11.0.0/16 e define o gateway como 10.11.0.2.
+        3. Crie uma nova rede Overlay usando o sinalizador --ingress, junto com as opções personalizadas que deseja definir. Este exemplo define o MTU como 1200, define a sub-rede como 10.11.0.0/16 e define o gateway como 10.11.0.2.
 
             $ docker network create --driver overlay --ingress --subnet=10.11.0.0/16 --gateway=10.11.0.2 --opt com.docker.network.driver.mtu=1200
 
@@ -87,6 +87,110 @@ Personalize a rede ingress padrão
 
         4. Reinicie os serviços que você interrompeu na primeira etapa.
 
+
+Personalize a interface docker_gwbridge
+-----------------------------------------
+
+    O docker_gwbridge é uma Bridge virtual que conecta as redes Overlay (incluindo a rede ingress) a uma rede física individual de um daemon do Docker. O Docker o cria automaticamente quando você inicializa um swarm ou une um host Docker a um swarm, mas não é um dispositivo Docker. Ele existe no kernel do host Docker. Se precisar personalizar suas configurações, você deve fazer isso antes de juntar o host Docker ao Swarm ou depois de remover temporariamente o host do Swarm.
+
+        1. Pare o Docker.
+
+        2. Exclua a interface docker_gwbridge existente.
+
+             $ sudo ip link set docker_gwbridge down
+
+             $ sudo ip link del dev docker_gwbridge
+
+        3. Inicie o Docker. Não entre ou inicialize o Swarm.
+
+        4. Crie ou recrie a Bridge docker_gwbridge manualmente com suas configurações personalizadas, usando o comando docker network create. Este exemplo usa a sub-rede 10.11.0.0/16. Para obter uma lista completa de opções personalizáveis, consulte Opções de driver Bridge.
+
+            $ docker network create --subnet 10.11.0.0/16 \
+            --opt com.docker.network.bridge.name=docker_gwbridge \ 
+            --opt com.docker.network.bridge.enable_icc=false \
+            --opt com.docker.network.bridge.enable_ip_masquerade=true docker_gwbridge
+
+        5. Inicialize ou junte-se ao Swarm. Como a Bridge já existe, o Docker não a cria com configurações automáticas.
+
+
+Operações para serviços de Swarm
+----------------------------------
+
+    Publicar portas em uma rede Overlay
+    ----------------------------------------
+
+        Os serviços Swarm conectados à mesma rede overlay expõem efetivamente todas as portas umas às outras. Para que uma porta seja acessível fora do serviço, essa porta deve ser publicada usando o sinalizador -p ou --publish no docker service create ou docker service update. Tanto a sintaxe legada separada por dois pontos quanto a mais nova sintaxe de valores separados por vírgula são suportadas. A sintaxe mais longa é preferida porque é um tanto autodocumentada.
+
+            |---------------------------------------------------------------------------------------------------------------------------|
+            |             Valor da Flag                   |                  Descrição                                                  |
+            |---------------------------------------------------------------------------------------------------------------------------|
+            |                                             |                                                                             |
+            | -p 8080:80 or                               |                                                                             |
+            | -p published=8080,target=80                 |  Mapeie a porta TCP 80 no serviço para a porta 8080 na malha de roteamento. |
+            |                                             |                                                                             |
+            |---------------------------------------------------------------------------------------------------------------------------|
+            |                                             |                                                                             |
+            | -p 8080:80/tcp -p 8080:80/udp ou            | Mapeie a porta TCP 80 no serviço para a porta TCP 8080 na malha de          |
+            | -p published=8080,target=80,protocol=tcp    | roteamento e mapeie a porta UDP 80 no serviço para a porta  UDP 8080 na     |
+            | -p published=8080,target=80,protocol=udp	  | malha de roteamento.                                                        |
+            |                                             |                                                                             |
+            |---------------------------------------------------------------------------------------------------------------------------|
+
+
+        Ignore a malha de roteamento para um serviço Swarm
+        ----------------------------------------------------
+
+            Por padrão, os serviços Swarm que publicam portas fazem isso usando a malha de roteamento. Quando você se conecta a uma porta publicada em qualquer nó swarm (esteja ele executando um determinado serviço ou não), você é redirecionado para um worker que está executando aquele serviço, de forma transparente. Efetivamente, o Docker atua como um balanceador de carga para seus serviços Swarm. Os serviços que usam a malha de roteamento estão sendo executados no modo IP virtual (VIP). Mesmo um serviço em execução em cada nó (por meio do sinalizador global --mode) usa a malha de roteamento. Ao usar a malha de roteamento, não há garantia sobre quais solicitações de cliente de serviço de nó Docker.
+
+            Para ignorar a malha de roteamento, você pode iniciar um serviço usando o modo DNS Round Robin (DNSRR), definindo o sinalizador --endpoint-mode como dnsrr. Você deve executar seu próprio balanceador de carga antes do serviço. Uma consulta DNS para o nome do serviço no host Docker retorna uma lista de endereços IP para os nós que executam o serviço. Configure seu balanceador de carga para consumir essa lista e equilibrar o tráfego entre os nós.
+
+
+        Controle separado e tráfego de dados
+        --------------------------------------
+
+            Por padrão, o tráfego de controle relacionado ao gerenciamento Swarm e o tráfego de e para seus aplicativos é executado na mesma rede, embora o tráfego de controle Swarm seja criptografado. Você pode configurar o Docker para usar interfaces de rede separadas para lidar com os dois tipos diferentes de tráfego. Ao inicializar ou unir o Swarm, especifique --advertise-addr e --datapath-addr separadamente. Você deve fazer isso para cada nó que se junta ao Swarm.
+
+
+    Operações para contêineres autônomos em redes overlay
+    ----------------------------------------------------------
+
+        Anexe um contêiner autônomo a uma rede overlay
+        -----------------------------------------------
+
+            A rede ingress é criada sem o sinalizador --attachable, o que significa que apenas os serviços Swarm podem usá-la, e não contêineres autônomos. Você pode conectar contêineres autônomos a redes Overlay definidas pelo usuário que são criadas com o sinalizador --attachable. Isso dá aos containers autônomos em execução em diferentes daemons do Docker a capacidade de se comunicar sem a necessidade de configurar o roteamento nos hosts daemon individuais do Docker.
+
+    
+    Publicar portas
+    -----------------
+
+        |-------------------------------------------------------------------------------------------------------------------|
+        |      Valor do sinalizador       |                                 Descrição                                       |
+        |-------------------------------------------------------------------------------------------------------------------|
+        |                                 |                                                                                 |
+        | -p 8080:80                      | Mapeie a porta TCP 80 no contêiner para a porta 8080 na rede de sobreposição.   |
+        |                                 |                                                                                 |
+        |-------------------------------------------------------------------------------------------------------------------|
+        |                                 |                                                                                 |
+        | -p 8080:80/udp	              | Mapeie a porta UDP 80 no contêiner para a porta 8080 na rede de sobreposição.   |
+        |                                 |                                                                                 |
+        |---------------------------------|---------------------------------------------------------------------------------|
+        |                                 |                                                                                 |
+        | -p 8080:80/sctp	              | Mapeie a porta SCTP 80 no contêiner para a porta 8080 na rede de sobreposição.  |
+        |                                 |                                                                                 |
+        |---------------------------------|---------------------------------------------------------------------------------|
+        |                                 |                                                                                 |
+        | -p 8080:80/tcp -p 8080:80/udp	  | Mapeie a porta TCP 80 no contêiner para a porta TCP 8080 na rede de             |
+        |                                 | sobreposição e mapeie a porta UDP 80 no contêiner para a porta UDP              |
+        |                                 | 8080 na rede de sobreposição.                                                   |
+        |                                 |                                                                                 |
+        |---------------------------------|---------------------------------------------------------------------------------|
+
+    
+    Descoberta de contêiner
+    --------------------------
+
+        Para a maioria das situações, você deve se conectar ao nome do serviço, que tem balanceamento de carga e é gerenciado por todos os contêineres (“tarefas”) que dão suporte ao serviço. Para obter uma lista de todas as tarefas que apoiam o serviço, faça uma pesquisa DNS para as tarefas. <Nome do serviço>.
+             
 
 Fontes:
 ----------

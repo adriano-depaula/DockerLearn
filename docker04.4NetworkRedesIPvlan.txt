@@ -1,0 +1,105 @@
+Use redes IPvlan
+------------------
+
+    O driver IPvlan oferece aos usuários controle total sobre o endereçamento IPv4 e IPv6. O driver VLAN é construído em cima disso, fornecendo às operadores o controle completo da marcação da VLAN da camada 2 e até mesmo do roteamento IPvlan L3 para usuários interessados na integração de rede subjacente. Para implantações Overlay que abstraem as restrições físicas, consulte o driver Overlay de vários hosts.
+
+    IPvlan é uma nova reviravolta na técnica de virtualização de rede testada e comprovada. As implementações do Linux são extremamente leves porque, em vez de usar a Bridge Linux tradicional para isolamento, elas são associadas a uma interface ou subinterface Linux Ethernet para impor a separação entre as redes e a conectividade com a rede física.
+
+    O IPvlan oferece uma série de recursos exclusivos e muito espaço para mais inovações com os vários modos. Duas vantagens de alto nível dessas abordagens são: as implicações positivas de desempenho de contornar a Bridge Linux e a simplicidade de ter menos peças móveis. A remoção da Bridge que tradicionalmente reside entre a NIC do host Docker e a interface do contêiner deixa uma configuração simples que consiste em interfaces de contêiner, anexadas diretamente à interface do host Docker. Esse resultado é de fácil acesso para serviços externos, pois não há necessidade de mapeamentos de portas nesses cenários.
+
+
+Pré-requisitos
+---------------
+
+    - Os exemplos nesta página são todos host único.
+
+    - Todos os exemplos podem ser executados em um único host executando o Docker. Qualquer exemplo usando uma subinterface como eth0.10 pode ser substituído por eth0 ou qualquer outra interface pai válida no host Docker. Subinterfaces com a. são criados instantaneamente. -o interfaces pai também podem ser deixadas de fora da rede docker criar todas juntas e o driver criará uma interface fictícia que permitirá a conectividade do host local para executar os exemplos.
+
+    - Requisitos de kernel:
+
+        - Para verificar sua versão atual do kernel, use uname -r
+
+        - IPvlan Linux kernel v4.2 + (existe suporte para kernels anteriores, mas tem bugs)
+
+
+Exemplo de uso do modo IPvlan L2
+----------------------------------
+
+    Um exemplo da topologia do modo IPvlan L2 é mostrado na imagem a seguir. O driver é especificado com a opção -d driver_name. Neste caso, -d ipvlan.
+
+    A interface pai no próximo exemplo -o parent = eth0 é configurada da seguinte maneira:
+
+        $ ip addr show enp3s0
+
+    Use a rede da interface do host como a --subnet na criação da rede docker. O contêiner será conectado à mesma rede que a interface do host, conforme definido por meio da opção -o parent =.
+
+    Crie a rede IPvlan e execute um contêiner anexado a ela:
+
+        # IPvlan (-o ipvlan_mode= Padrão para o modo L2 se não for especificado)
+        -------------------------------------------------------------------------
+        $ docker network create -d ipvlan \
+            --subnet=192.168.1.0/24 \
+            --gateway=192.168.1.1 \
+            -o ipvlan_mode=12 \
+            -o parent=enp3s0 db_net
+
+        # Inicie um contêiner na rede db_net
+        --------------------------------------
+        $ docker run --net=db_net -it --rm alpine /bin/sh
+
+        # NOTA: os contêineres NÃO podem executar ping nas interfaces de host subjacentes como
+        # eles são filtrados intencionalmente pelo Linux para isolamento adicional.
+
+    O modo padrão para IPvlan é l2. Se -o ipvlan_mode = no forem especificados, o modo padrão será usado. Da mesma forma, se o --gateway for deixado vazio, o primeiro endereço utilizável na rede será definido como o gateway. Por exemplo, se a sub-rede fornecida na criação de rede for --subnet = 192.168.1.0 / 24, o gateway que o contêiner recebe é 192.168.1.1.
+
+    Para ajudar a entender como esse modo interage com outros hosts, a figura a seguir mostra o mesmo segmento de camada 2 entre dois hosts Docker que se aplica ao modo IPvlan L2.
+
+    O seguinte criará exatamente a mesma rede que a rede db_net criada anteriormente, com os padrões do driver para --gateway = 192.168.1.1 e -o ipvlan_mode = l2.
+
+        # IPvlan (-o ipvlan_mode = defaults para o modo L2, se não for especificado)
+        -----------------------------------------------------------------------------
+        $ docker network create -d ipvlan \
+            --subnet=192.168.1.0./24 \
+            -o parent=enp3s0 db_net_ipv
+
+        # Inicie um contêiner com um nome explícito no modo daemon
+        ------------------------------------------------------------
+        $ docker run --net=db_net_ipv --name=ipv1 -itd alpine /bin/sh
+
+        # Inicie um segundo contêiner e execute ping usando o nome do contêiner
+        # para ver o docker incluído a funcionalidade de resolução de nome
+        -------------------------------------------------------------------------
+        $ docker run --net=db_net_ipv --name=ipv2 -it --rm alpine /bin/sh
+        $ ping -c 4 ipv1
+
+        # NOTA: os contêineres NÃO podem executar ping nas interfaces de host subjacentes como
+        # eles são filtrados intencionalmente pelo Linux para isolamento adicional.
+
+    Os drivers também suportam o sinalizador --internal, que isola completamente os contêineres em uma rede de qualquer comunicação externa a essa rede. Uma vez que o isolamento da rede é fortemente acoplado à interface pai da rede, o resultado de deixar a opção -o parent = option de uma criação de rede docker é exatamente o mesmo que a opção --internal. Se a interface pai não for especificada ou o sinalizador --internal for usado, uma interface pai fictícia do tipo netlink é criada para o usuário e usada como interface pai, isolando efetivamente a rede por completo.
+
+    Os dois exemplos de criação de rede docker a seguir resultam em redes idênticas às quais você pode anexar um contêiner:
+
+        # Vazio '-o parent =' cria uma rede isolada
+        ---------------------------------------------
+        $ docker network  create -d ipvlan \
+            --subnet=192.168.10.0/24 isolated1
+
+        # A sinalização '--internal' explícita é a mesma:
+        --------------------------------------------------
+        $ docker network create -d ipvlan \
+            --subnet=192.168.11.0/24 --internal isolated2
+
+        # Mesmo o '--subnet =' pode ser deixado em branco e o padrão
+        # A sub-rede IPAM de 172.18.0.0/16 será atribuída
+        --------------------------------------------------------------- 
+        $ docker network create -d ipvlan isolated3
+
+        $ docker run --net=isolated1 --name=cid1 -it --rm alpine /bin/sh
+        $ docker run --net=isolated2 --name=cid2 -it --rm alpine /bin/sh
+        $ docker run --net=isolated3 --name=cid3 -it --rm alpine /bin/sh
+
+        # Para anexar a qualquer use `docker exec` e inicie um shell
+        --------------------------------------------------------------
+        $ docker exec -it cid1 /bin/sh
+        $ docker exec -it cid2 /bin/sh
+        $ docker exec -it cid3 /bin/sh

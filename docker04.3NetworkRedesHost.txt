@@ -1,0 +1,12 @@
+Use rede de host
+-----------------
+
+    Se você usar o modo de rede do host para um contêiner, a pilha de rede desse contêiner não é isolada do host Docker (o contêiner compartilha o namespace de rede do host) e o contêiner não obtém seu próprio endereço IP alocado. Por exemplo, se você executar um contêiner que se conecta à porta 80 e usar a rede do host, o aplicativo do contêiner estará disponível na porta 80 no endereço IP do host.
+
+    Nota: Dado que o contêiner não tem seu próprio endereço IP ao usar a rede no modo host, o mapeamento de portas não tem efeito e as opções -p, --publish, -P e --publish-all são ignoradas, produzindo um aviso em vez disso:
+
+    A rede no modo host pode ser útil para otimizar o desempenho e em situações em que um contêiner precisa lidar com uma grande variedade de portas, já que não requer conversão de endereço de rede (NAT) e nenhum “userland-proxy” é criado para cada porta.
+
+    O driver de rede do host funciona apenas em hosts Linux e não é compatível com Docker Desktop para Mac, Docker Desktop para Windows ou Docker EE para Windows Server.
+
+    Você também pode usar uma rede host para um serviço swarm, passando --network host para o comando docker service create. Nesse caso, o tráfego de controle (tráfego relacionado ao gerenciamento do swarm e do serviço) ainda é enviado por meio de uma rede Overlay, mas os contêineres de serviço swarm individuais enviam dados usando a rede e portas do host do Docker daemon. Isso cria algumas limitações extras. Por exemplo, se um contêiner de serviço se vincula à porta 80, apenas um contêiner de serviço pode ser executado em um determinado nó Swarm.
