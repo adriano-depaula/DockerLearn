@@ -103,3 +103,315 @@ Exemplo de uso do modo IPvlan L2
         $ docker exec -it cid1 /bin/sh
         $ docker exec -it cid2 /bin/sh
         $ docker exec -it cid3 /bin/sh
+
+    
+Exemplo de uso do modo L2 do tronco IPvlan 802.1q
+----------------------------------------------------
+
+    Arquitetonicamente, o modo de entroncamento IPvlan L2 é o mesmo que Macvlan no que diz respeito a gateways e isolamento de caminho L2. Existem nuances que podem ser vantajosas para a pressão da tabela CAM em switches ToR, um MAC por porta e exaustão de MAC em um NIC pai do host, para citar alguns. O cenário do tronco 802.1q parece o mesmo. Ambos os modos aderem aos padrões de etiquetagem e têm integração perfeita com a rede física para integração underlay e integrações de plugins de fornecedores de hardware.
+
+    Os hosts na mesma VLAN estão normalmente na mesma sub-rede e quase sempre são agrupados com base em sua política de segurança. Na maioria dos cenários, um aplicativo multicamadas é dividido em diferentes sub-redes porque o perfil de segurança de cada processo requer alguma forma de isolamento. Por exemplo, hospedar seu processamento de cartão de crédito na mesma rede virtual que o servidor da web front-end seria um problema de conformidade regulatória, além de contornar a prática recomendada de longa data de arquiteturas de defesa em camadas em profundidade. As VLANs ou o VNI (Identificador de Rede Virtual) equívoco ao usar o driver Overlay são a primeira etapa para isolar o tráfego do locatário.
+
+    A subinterface Linux marcada com uma VLAN pode já existir ou será criada quando você chamar uma criação de rede docker. docker network rm excluirá a subinterface. Interfaces pai como eth0 não são excluídas, apenas subinterfaces com um índice pai netlink > 0.
+
+    Para que o driver adicione/exclua as subinterfaces de VLAN, o formato precisa ser interface_name.vlan_tag. Outra nomenclatura de subinterface pode ser usada como o pai especificado, mas o link não será excluído automaticamente quando o docker network rm for chamado.
+
+    Por exemplo: use eth0.10 para denotar uma subinterface de eth0 marcada com o id de VLAN de 10. O comando ip link equivalente seria ip link add link nome eth0 eth0.10 tipo vlan id 10.
+
+    O exemplo cria as redes marcadas com VLAN e, em seguida, inicia dois contêineres para testar a conectividade entre eles. VLANs diferentes não podem executar ping entre si sem um roteamento de roteador entre as duas redes. O namespace padrão não pode ser alcançado por design IPvlan, a fim de isolar os namespaces do contêiner do host subjacente.
+
+    VLAN ID 20
+    -------------
+
+        Na primeira rede marcada e isolada pelo host Docker, eth0.20 é a interface pai marcada com VLAN id 20 especificada com -o parent = eth0.20. Outros formatos de nomenclatura podem ser usados, mas os links precisam ser adicionados e excluídos manualmente usando o link ip ou os arquivos de configuração do Linux. Desde que o pai -o exista, qualquer coisa pode ser usada se for compatível com o Linux netlink.
+
+            # Agora adicione redes e hosts como faria normalmente, anexando à (sub) interface principal que está marcada
+            --------------------------------------------------------------------------------------------------------------
+            $ docker network create -d ipvlan \
+                --subnet=192.168.20.0/24 \
+                --gateway= 192.168.20.1 \
+                -o parent=eth0.20 ipvlan20
+
+            # em dois terminais separados, inicie um contêiner Docker e os contêineres agora podem executar ping um no outro.
+            ------------------------------------------------------------------------------------------------------------------
+            $ docker run --net=ipvlan20 -it --name ivlan_test1 --rm alpine /bin/sh
+            $ docker run --net=ipvlan20 -it --name ivlan_test2 --rm alpine /bin/sh
+
+
+    VLAN ID 30
+    -------------
+
+        Na segunda rede, marcada e isolada pelo host Docker, eth0.30 é a interface pai marcada com VLAN id 30 especificada com -o parent = eth0.30. O ipvlan_mode = padroniza para o modo l2 ipvlan_mode = l2. Ele também pode ser definido explicitamente com o mesmo resultado mostrado no próximo exemplo.
+
+            # agora adicione redes e hosts como faria normalmente, conectando-se à (sub) interface principal que está marcada.
+            -------------------------------------------------------------------------------------------------------------------
+            $ docker network create -d ipvlan \
+                --subnet=192.168.30.0/24 \
+                --gateway=192.168.30.1 \
+                -o parent=eth0.30 \
+                -o ipvlan_mode=12 ipvlan30
+
+            # em dois terminais separados, inicie um contêiner do Docker e os contêineres agora podem executar ping um no outro.
+            ----------------------------------------------------------------------------------------------------------------------
+            $ docker run --net=ipvlan30 -it --name ivlan_test3 --rm alpine /bin/sh
+            $ docker run --net=ipvlan30 -it --name ivlan_test3 --rm alpine /bin/sh
+
+        O gateway é definido dentro do contêiner como o gateway padrão. Esse gateway normalmente seria um roteador externo na rede.
+
+            $ ip route
+
+        Exemplo: Modo IPvlan L2 de várias sub-redes iniciando dois contêineres na mesma sub-rede e executando ping um no outro. Para que 192.168.114.0/24 alcance 192.168.116.0/24, é necessário um roteador externo no modo L2. O modo L3 pode rotear entre sub-redes que compartilham um -o parent = comum =.
+
+        Os endereços secundários em roteadores de rede são comuns à medida que um espaço de endereço se esgota para adicionar outro secundário a uma interface L3 VLAN ou comumente referido como uma “interface virtual comutada” (SVI).
+
+            $ docker network create -d ipvlan \
+                --subnet=192.168.114.0/24 --subnet=192.168.116.0/24 \
+                --gateway=192.168.114.254 --gateway=192.168.116.254 \
+                -o parent=eth0.114 \
+                -o ipvlan_mode=12 ipvlan114
+
+            $ docker run --net=ipvlan114 --ip=192.168.114.10 -it --rm alpine /bin/sh
+            $ docker run --net=ipvlan114 --ip=192.168.114.11 -it --rm alpine /bin/sh
+
+        Uma lição importante é que as operadoras têm a capacidade de mapear sua rede física em sua rede virtual para integrar contêineres em seu ambiente, sem a necessidade de revisões operacionais. O NetOps coloca um tronco 802.1q no host Docker. Esse link virtual seria o -o parent=passado na criação da rede. Para links não marcados (não VLAN), é tão simples quanto -o parent=eth0 ou para troncos 802.1q com IDs de VLAN, cada rede é mapeada para a VLAN / Sub-rede correspondente da rede.
+
+        Por exemplo, o NetOps fornece VLAN ID e as sub-redes associadas para VLANs que estão sendo passadas no link Ethernet para o servidor host Docker. Esses valores são conectados à rede docker para criar comandos ao provisionar as redes Docker. Essas são configurações persistentes que são aplicadas sempre que o mecanismo Docker é iniciado, o que alivia o gerenciamento de arquivos de configuração frequentemente complexos. As interfaces de rede também podem ser gerenciadas manualmente por serem pré-criadas e a rede Docker nunca as modificará e as usará como interfaces pai. Os exemplos de mapeamentos de NetOps para comandos de rede Docker são os seguintes:
+
+            - VLAN: 10, Subnet: 172.16.80.0/24, Gateway: 172.16.80.1
+
+                --subnet=172.16.80.0/24 --gateway=172.16.80.1 -o parent=eth0.10
+
+            - VLAN: 20, IP subnet: 172.16.50.0/22, Gateway: 172.16.50.1
+
+                --subnet=172.16.50.0/22 --gateway=172.16.50.1 -o parent=eth0.20
+
+            - VLAN: 30, IP subnet: 10.1.100.0/16, Gateway: 10.1.100.1
+
+                --subnet=10.1.100.0/16 --gateway=10.1.100.1 -o parent=eth0.30
+
+            
+Exemplo de modo IPvlan L3
+----------------------------
+
+    O IPvlan exigirá que as rotas sejam distribuídas para cada terminal. O driver apenas constrói a porta do modo IPvlan L3 e anexa o contêiner à interface. A distribuição de rotas em um cluster está além da implementação inicial desse driver com escopo de host único. No modo L3, o host Docker é muito semelhante a um roteador iniciando novas redes no contêiner. Eles estão em redes que a rede upstream não conhecerá sem a distribuição de rotas. Para os curiosos sobre como o IPvlan L3 se encaixará na rede de contêineres, consulte os exemplos a seguir.
+
+    O modo IPvlan L3 elimina todo o tráfego de broadcast e multicast. Este motivo por si só torna o modo IPvlan L3 um candidato principal para quem procura integração de rede em grande escala e previsível. É previsível e, por sua vez, levará a tempos de atividade maiores porque não há nenhuma Bridge envolvida. Os loops de bridging têm sido responsáveis por interrupções de alto perfil que podem ser difíceis de identificar, dependendo do tamanho do domínio de falha. Isso se deve à natureza em cascata de BPDUs (Bridge Port Data Units) que são inundados em um domínio de broadcast (VLAN) para localizar e bloquear loops de topologia. Eliminar os domínios de bridging ou, pelo menos, mantê-los isolados para um par de ToRs (switches da parte superior do rack) reduzirá a dificuldade de solucionar os problemas de instabilidades de bridging. Os modos IPvlan L2 são adequados para VLANs isoladas apenas entroncadas em um par de ToRs que podem fornecer uma malha sem bloqueio sem loop. A próxima etapa é rotear na borda por meio do modo IPvlan L3, que reduz um domínio de falha para um host local apenas.
+
+        - O modo L3 precisa estar em uma sub-rede separada como o namespace padrão, pois requer uma rota de netlink no namespace padrão apontando para a interface pai IPvlan.
+
+        - A interface pai usada neste exemplo é a eth0 e está na sub-rede 192.168.1.0/24. Observe que a rede docker não está na mesma sub-rede que a eth0.
+
+        - Ao contrário dos modos IPvlan l2, diferentes sub-redes / redes podem executar ping entre si, desde que compartilhem a mesma interface pai -o pai =.
+
+            $ ip a show etho
+
+        - Um gateway tradicional não significa muito para uma interface IPvlan de modo L3, uma vez que não há tráfego de broadcast permitido. Por causa disso, o gateway padrão do contêiner aponta para o dispositivo eth0 do contêiner. Veja abaixo a saída CLI da rota ip ou rota ip -6 de dentro de um contêiner L3 para detalhes.
+
+    O modo `-o ipvlan_mode = l3 deve ser explicitamente especificado uma vez que o modo IPvlan padrão é l2`.
+
+    O exemplo a seguir não especifica uma interface pai. Os drivers de rede criarão um link do tipo fictício para o usuário, em vez de rejeitar a criação da rede e isolar os contêineres para que não se comuniquem apenas uns com os outros.
+
+        # Crie a rede IPvlan L3
+        -------------------------
+        $ docker network create -d ipvlan \
+            --subnet=192.168.214.0/24 \
+            --subnet=10.1.214.0/24 \
+            -o ipvlan_mode=13 ipnet210
+
+        # Teste a conectividade 192.168.214.0/24
+        -------------------------------------------
+        $ docker run --net=ipnet210 --ip=192.168.214.10 -itd alpine /bin/sh
+        $ docker run --net=ipnet210 --ip=10.1.214.10 -itd alpine /bin/sh
+
+        # Teste a conectividade L3 de 10.1.214.0/24 a 192.168.212.0/24
+        ---------------------------------------------------------------
+        $ docker run --net=ipnet210 --ip=192.168.214.9 -it --rm alpine ping -c 2 10.1.214.10
+
+        # Teste a conectividade L3 de 192.168.212.0/24 a 10.1.214.0/24
+        ----------------------------------------------------------------
+        $ docker run --net=ipnet210 --ip=10.1.214.9 -it --rm alpine ping -c 2 192.168.214.10
+
+    Observe que não há opção --gateway = na criação da rede. O campo é ignorado se for especificado o modo l3. Dê uma olhada na tabela de roteamento do contêiner de dentro do contêiner:
+
+        # Dentro de um contêiner de modo L3
+        ----------------------------------------
+        $ ip route
+
+    Para fazer o ping dos contêineres de um host Docker remoto ou o contêiner ser capaz de fazer o ping de um host remoto, o host remoto ou a rede física no meio precisa ter uma rota apontando para o endereço IP do host da interface de host Docker do contêiner.
+
+
+Modo IPv4 IPv6 IPvlan L2 de pilha dupla
+-----------------------------------------
+
+    - A Libnetwork não apenas oferece controle total sobre o endereçamento IPv4, mas também fornece controle total sobre o endereçamento IPv6, bem como paridade de recursos entre as duas famílias de endereços.
+
+    - O próximo exemplo começará apenas com IPv6. Inicie dois contêineres na mesma VLAN 139 e execute ping um no outro. Como a sub-rede IPv4 não é especificada, o IPAM padrão provisionará uma sub-rede IPv4 padrão. Essa sub-rede é isolada, a menos que a rede upstream a esteja roteando explicitamente na VLAN 139.
+
+    # Crie uma rede v6
+    --------------------
+    $ docker network create -d ipvlan \
+        --subnet=2001:db8:abc2::/64 --gateway=2001:db8:abc2::22 \
+        -o parent=eth0.139 v6ipvlan139
+
+    # Inicie um contêiner na rede
+    -------------------------------
+    $ docker run --net=v6ipvlan139 -it --rm alpine /bin/sh
+
+Visualize a interface eth0 do contêiner e a tabela de roteamento v6:
+
+    # Dentro do contêiner IPv6
+    ----------------------------
+    $ ip a show eth0
+
+    $ ip -6 route
+
+Inicie um segundo contêiner e execute ping no endereço v6 do primeiro contêiner.
+
+    # Teste a conectividade L2 em IPv6
+    ------------------------------------
+    $ docker run --net=v6ipvlan139 -it --rm alpine /bin/sh
+
+    # Dentro do segundo contêiner IPv6
+    ------------------------------------
+    $ ip a show eth0
+
+    $ ping6 2001:db8:abc2::1
+
+O próximo exemplo com a configuração de uma rede IPv4 / IPv6 de pilha dupla com um exemplo de ID de VLAN de 140.
+
+Em seguida, crie uma rede com duas sub-redes IPv4 e uma sub-rede IPv6, todas com gateways explícitos:
+
+    $ docker network create -d ipvlan \
+        --subnet=192.168.140.0/24 --subnet=192.168.142.0/24 \
+        --gateway=192.168.140.1 --gateway=192.168.142.1 \
+        --subnet=2001:db8:abc9::/64 --gateway=2001:db8:abc9::22 \
+        -o parent=eth0.140 \
+        -o ipvlan_mode=12 ipvlan140
+
+Inicie um contêiner e visualize as tabelas de roteamento eth0 e v4 e v6:
+
+    $ docker run --net=ipvlan140 --ip6=2001:db8:abc2::51 -it --rm alpine /bin/sh
+
+    $ ip a show etho
+
+    $ ip route
+
+    $ ip -6 route
+
+Inicie um segundo contêiner com um endereço --ip4 específico e execute ping no primeiro host usando pacotes IPv4:
+
+    $ docker run --net=ipvlan140 --ip=192.168.149.10 -it --rm alpine /bin/sh
+
+    Sub-redes diferentes na mesma interface pai no modo IPvlan L2 não podem executar ping uma na outra. Isso requer um roteador para fazer proxy das solicitações com uma sub-rede secundária. No entanto, o IPvlan L3 roteará o tráfego unicast entre sub-redes distintas, desde que compartilhem o mesmo link pai -o.
+
+
+Modo IPv4 IPv6 IPvlan L3 de pilha dupla
+------------------------------------------
+
+    Exemplo: Modo IPvlan L3 Dual Stack IPv4 / IPv6, Multi-Sub-rede com tag VLAN 802.1q: 118
+
+    Como em todos os exemplos, uma interface VLAN marcada não precisa ser usada. As subinterfaces podem ser trocadas com eth0, eth1, bond0 ou qualquer outra interface válida no host que não seja o loopback de lo.
+
+    A principal diferença que você verá é que o modo L3 não cria uma rota padrão com um próximo salto, mas, em vez disso, define uma rota padrão apontando para dev eth apenas, uma vez que ARP / Broadcasts / Multicast são todos filtrados pelo Linux de acordo com o design. Como a interface pai atua essencialmente como um roteador, o IP e a sub-rede da interface pai precisam ser diferentes das redes de contêiner. Isso é o oposto dos modos bridge e L2, que precisam estar na mesma sub-rede (domínio de broadcast) para encaminhar pacotes de broadcast e multicast.
+
+    # Crie uma rede IPv6 + IPv4 Dual Stack IPvlan L3
+    # Gateways para v4 e v6 são definidos para um dev, por exemplo, 'default dev eth0'
+    -------------------------------------------------------------------------------------
+    $ docker network create -d ipvlan \
+        --subnet=192.168.119.0/24 \
+        --subnet=192.168.112.0/24 \
+        --subnet=2001:db8:abc6::/64 \
+        -o parent=eth0 \
+        -o ipvlan_mode=13 ipnet110
+
+    # Inicie alguns contêineres na rede (ipnet110) em terminais separados e verifique a conectividade
+    ----------------------------------------------------------------------------------------------------
+    $ docker run --net=ipnet110 -it --rm alpine /bin/sh
+
+    # Inicie um segundo contêiner especificando o endereço da v6
+    --------------------------------------------------------------
+    $ docker run --net=ipnet110 --ip6=2001:db8:abc6::10 -it --rm alpine /bin/sh
+
+    # Comece um terceiro especificando o endereço IPv4
+    -----------------------------------------------------
+    $ docker run --net=ipnet110 --ip=192.168.112.30 -it --rm alpine /bin/sh
+
+    # Comece um quarto especificando os endereços IPv4 e IPv6
+    -----------------------------------------------------------
+    $ docker run --net=ipnet110 --ip6=2001:db8:abc6::50 --ip=192.168.112.50 -it --rm alpine /bin/sh
+
+As saídas da interface e da tabela de roteamento são as seguintes:
+
+    $ ip a show eth0
+
+    # Observe que a rota padrão é o dispositivo eth porque os ARPs são filtrados.
+    -------------------------------------------------------------------------------
+    $ ip route
+
+    $ ip -6 route
+
+    Pode haver um bug ao especificar endereços --ip6 = quando você exclui um contêiner com um endereço v6 especificado e, em seguida, inicia um novo contêiner com o mesmo endereço v6, ele lança o seguinte, como se o endereço não estivesse sendo liberado corretamente para o pool v6 . Ele não conseguirá desmontar o contêiner e ficará morto.
+
+
+Criar links 802.1q manualmente
+---------------------------------
+
+    VLAN ID 40
+    ------------
+    
+        Se um usuário não quiser que o driver crie a subinterface VLAN, ele precisa existir antes de executar a criação de rede docker. Se você tiver uma nomenclatura de subinterface que não seja interface.vlan_id, ela será honrada na opção -o parent = novamente, desde que a interface exista e esteja ativa.
+
+        Os links, quando criados manualmente, podem receber qualquer nome, desde que existam quando a rede é criada. Os links criados manualmente não são excluídos, independentemente do nome, quando a rede é excluída com docker network rm.
+
+            # criar uma nova subinterface ligada ao dot1q vlan 40
+            -------------------------------------------------------
+            $ ip link add link eth0 name eth0.40 type vlan id 40
+
+            # habilitar a nova subinterface
+            ----------------------------------
+            $ ip link set eth0.40 up
+
+            # agora adicione redes e hosts como faria normalmente, anexando à (sub) interface principal que está marcada
+            ---------------------------------------------------------------------------------------------------------------
+            $ docker network create -d ipvlan \
+                --subnet=192.168.40.0/24 \
+                --gateway=192.168.40.1 \
+                -o parent=eth0.40 ipvlan40
+
+            # em dois terminais separados, inicie um contêiner do Docker e os contêineres agora podem executar ping um no outro.
+            ---------------------------------------------------------------------------------------------------------------------
+            $ docker run --net=ipvlan40 -it --name ivlan_test5 --rm alpine /bin/sh
+
+            $ docker run --net=ipvlan40 -it --name ivlan_test6 --rm alpine /bin/sh
+
+        Exemplo: Subinterface VLAN criada manualmente com qualquer nome:
+
+            # criar uma nova subinterface ligada ao dot1q vlan 40
+            -------------------------------------------------------
+            $ ip link add link eth0 name foo type vlan id 40
+
+            # habilitar a nova subinterface
+            ----------------------------------
+            $ ip link set foo up
+
+            # agora adicione redes e hosts como faria normalmente, anexando à (sub) interface principal que está marcada
+            --------------------------------------------------------------------------------------------------------------
+            $ docker network create -d ipvlan \
+                --subnet=192.168.40.0/24 --gateway=192.168.40.1 \
+                -o parent=foo ipvlan40
+
+            # em dois terminais separados, inicie um contêiner do Docker e os contêineres agora podem executar ping um no outro.
+            ----------------------------------------------------------------------------------------------------------------------
+            $ docker run --net=ipvlan40 -it --name ivlan_test5 --rm alpine /bin/sh
+
+            $ docker run --net=ipvlan40 -it --name ivlan_test6 --rm alpine /bin/sh
+
+        Links criados manualmente podem ser limpos com:
+
+            $ ip link del foo
+
+        Como com todos os drivers Libnetwork, eles podem ser misturados e combinados, até mesmo rodando drivers de ecossistema de terceiros em paralelo para máxima flexibilidade para o usuário Docker.
+
+Fonte:
+----------
+    https://docs.docker.com/network/ipvlan/

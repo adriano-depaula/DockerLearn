@@ -1,0 +1,27 @@
+Desativar rede para um contêiner
+-----------------------------------
+
+    Se quiser desabilitar completamente a pilha de rede em um contêiner, você pode usar o sinalizador --network none ao iniciar o contêiner. Dentro do contêiner, apenas o dispositivo de loopback é criado. O exemplo a seguir ilustra isso.
+
+        1. Crie o contêiner.
+        ----------------------------- 
+            $ docker run --rm -dit \
+                --network none \
+                --name no-containers-net \
+                alpine:latest ash
+
+        2. Verifique a pilha de rede do contêiner, executando alguns comandos de rede comuns dentro do contêiner. Observe que nenhum eth0 foi criado.
+
+            $ docker exec no-containers-net ip link show
+
+            $ docker exec no-containers-net ip route
+
+        O segundo comando retorna vazio porque não há tabela de roteamento.
+
+        3. Pare o container. Ele é removido automaticamente porque foi criado com o sinalizador --rm.
+
+            $ docker stop no-containers-net
+
+Fontes:
+----------
+    https://docs.docker.com/network/none/

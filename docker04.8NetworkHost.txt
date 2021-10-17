@@ -1,0 +1,42 @@
+Networking usando a rede host
+-------------------------------
+
+    Esta série de tutoriais trata de contêineres autônomos de rede que se ligam diretamente à rede do host Docker, sem isolamento de rede.
+
+
+Objetivo
+----------
+
+    O objetivo deste tutorial é iniciar um contêiner nginx que se liga diretamente à porta 80 no host Docker. Do ponto de vista da rede, esse é o mesmo nível de isolamento como se o processo nginx estivesse sendo executado diretamente no host Docker e não em um contêiner. No entanto, de todas as outras maneiras, como armazenamento, namespace de processo e namespace de usuário, o processo nginx é isolado do host.
+
+
+Pré-requisitos
+-----------------
+
+    - Este procedimento requer que a porta 80 esteja disponível no host Docker. Para fazer o Nginx escutar em uma porta diferente, consulte a documentação da imagem nginx
+
+    - O driver de rede do host funciona apenas em hosts Linux e não é compatível com Docker Desktop para Mac, Docker Desktop para Windows ou Docker EE para Windows Server.
+
+
+Procedimento
+---------------
+
+    1. Crie e inicie o contêiner como um processo separado. A opção --rm significa remover o contêiner assim que ele sair/parar. O sinalizador -d significa iniciar o contêiner separado (em segundo plano).
+
+        $ docker run --rm -d --network host --name container01-nginx nginx
+
+    2. Acesse o Nginx navegando até http://localhost:80/.
+
+    3. Examine sua pilha de rede usando os seguintes comandos:
+
+        - Examine todas as interfaces de rede e verifique se uma nova não foi criada.
+
+            $ ip addr show
+
+        - Verifique qual processo está vinculado à porta 80, usando o comando netstat. Você precisa usar sudo porque o processo pertence ao usuário do Docker daemon e, de outra forma, você não conseguirá ver seu nome ou PID.
+
+            $ sudo netstat -tulpn | grep :80
+
+    4. Pare o container. Ele será removido automaticamente conforme foi iniciado com a opção --rm.
+
+        $ docker container stop container01-nginx

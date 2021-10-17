@@ -1,0 +1,73 @@
+Use Redes Macvlan
+----------------------
+
+    Alguns aplicativos, especialmente aplicativos legados ou aplicativos que monitoram o tráfego da rede, esperam ser conectados diretamente à rede física. Nesse tipo de situação, você pode usar o driver de rede macvlan para atribuir um endereço MAC à interface de rede virtual de cada contêiner, fazendo com que pareça ser uma interface de rede física diretamente conectada à rede física. Nesse caso, você precisa designar uma interface física em seu host Docker para usar para o macvlan, bem como a sub-rede e o gateway do macvlan. Você pode até isolar suas redes macvlan usando diferentes interfaces de rede física. Lembre-se do seguinte:
+
+        - É muito fácil danificar acidentalmente sua rede devido ao esgotamento do endereço IP ou à “propagação de VLAN”, que é uma situação em que você tem um número inadequadamente grande de endereços MAC exclusivos em sua rede.
+
+        - Seu equipamento de rede precisa ser capaz de lidar com o “modo promíscuo”, onde uma interface física pode ser atribuída a vários endereços MAC.
+
+        - Se seu aplicativo pode funcionar usando uma Bridge (em um único host Docker) ou overlay (para se comunicar entre vários hosts Docker), essas soluções podem ser melhores a longo prazo.
+
+
+Crie uma rede macvlan
+-----------------------
+
+    Quando você cria uma rede macvlan, ela pode estar no modo Bridge ou no modo Bridge de tronco 802.1q.
+
+        - No modo bridge, o tráfego macvlan passa por um dispositivo físico no host.
+
+        - No modo Bridge de tronco 802.1q, o tráfego passa por uma subinterface 802.1q que o Docker cria instantaneamente. Isso permite que você controle o roteamento e a filtragem em um nível mais granular.
+
+        Modo Bridge
+        -------------
+
+            Para criar uma rede macvlan que faz a Bridge com uma determinada interface de rede física, use --driver macvlan com o comando docker network create. Você também precisa especificar o pai, que é a interface pela qual o tráfego fisicamente passará no host Docker.
+
+            $ docker network create -d macvlan \
+                --subnet=17216.86.0/24 \
+                --gateway=172.16.86.1 \
+                -o oarent=eth0 pub_net
+
+            Se você precisar excluir endereços IP de uso na rede macvlan, como quando um determinado endereço IP já está em uso, use --aux-addresses:
+
+            $ docker network create -d macvlan \
+                --subnet=192.168.32.128/25 \
+                --ip-range=192.168.32.128/25 \
+                --gateway=192.168.32.254 \
+                --aux-address="MeuRoteador=192.168.32.129" \
+                -o parent=eth0 macnet32
+
+
+Modo Bridge de tronco 802.1q
+------------------------------
+
+    Se você especificar um nome de interface pai com um ponto incluído, como eth0.50, o Docker interpreta isso como uma subinterface de eth0 e cria a subinterface automaticamente.
+
+        $ docker network create -d macvlan \
+            --subnet=192.168.50.0/24 \
+            --gateway=192.168.50.1 \
+            -o parent=eth0.50 macvlan50
+
+Use um ipvlan em vez de macvlan
+--------------------------------
+
+    No exemplo acima, você ainda está usando uma Bridge L3. Você pode usar o ipvlan em vez disso e obter uma ponte L2. Especifique -o ipvlan_mode = l2.
+
+        $ docker network create -d ipvlan \
+            --subnet=192.168.219.0/24 \
+            --subnet=192.168.212.0/24 \
+            --gateway=192.168.210.254 \
+            --gateway=192.168.212.254 \
+            -o ipvlan_mode=12 -o parent=eth0 ipvlan210
+
+Uso IPv6
+------------
+    Se você configurou o Docker daemon para permitir IPv6, poderá usar redes macvlan IPv4 / IPv6 de pilha dupla.
+
+        $ docker network create -d macvlan \
+            --subnet=192.168.216.0/24 --subnet=192.168.218.0/24 \
+            --gateway=192.168.216.1 --gateway=192.168.218.1 \
+            --subnet=2001:db8:abc8::/64 --gateway=2001:db8:abc8::10 \
+            -o parent=eth0.218 \
+            -o macvlan_mode=bridge macvlan216
