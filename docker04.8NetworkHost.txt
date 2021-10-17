@@ -40,3 +40,7 @@ Procedimento
     4. Pare o container. Ele será removido automaticamente conforme foi iniciado com a opção --rm.
 
         $ docker container stop container01-nginx
+
+Fonte:
+---------
+    https://docs.docker.com/network/network-tutorial-host/
