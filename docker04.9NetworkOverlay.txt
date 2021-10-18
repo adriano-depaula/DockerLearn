@@ -1,0 +1,323 @@
+Rede com redes Overlay
+------------------------
+
+    Esta série de tutoriais trata de redes para serviços Swarm. Para rede com contêineres autônomos, consulte Rede com contêineres autônomos. Se você precisar aprender mais sobre a rede Docker em geral, consulte a visão geral.
+
+    Este tópico inclui quatro tutoriais diferentes. Você pode executar cada um deles no Linux, Windows ou Mac, mas para os dois últimos, você precisa de um segundo host Docker em execução em outro lugar.
+
+        - Usar a rede Overlay padrão demonstra como usar a rede Overlay padrão que o Docker configura para você automaticamente quando você inicializa ou se junta a um Swarm. Essa rede não é a melhor escolha para sistemas de produção.
+
+        - Usar redes Overlay definidas pelo usuário mostra como criar e usar suas próprias redes Overlay personalizadas para conectar serviços. Isso é recomendado para serviços executados em produção.
+
+        - Usar uma rede Overlay para contêineres autônomos mostra como se comunicar entre contêineres autônomos em diferentes daemons do Docker usando uma rede Overlay.
+
+        - A comunicação entre um contêiner e um serviço Swarm configura a comunicação entre um contêiner autônomo e um serviço Swarm, usando uma rede Overlay anexável.
+
+
+Pré-requisitos
+-----------------
+
+    Isso exige que você tenha pelo menos um Swarm de nó único, o que significa que você iniciou o Docker e execute docker swarm init no host. Você também pode executar os exemplos em um Swarm de vários nós.
+
+
+Use a rede Overlay padrão
+----------------------------
+
+    Neste exemplo, você inicia um serviço alpine e examina as características da rede do ponto de vista dos contêineres de serviço individuais.
+
+    Este tutorial não entra em detalhes específicos do sistema operacional sobre como as redes Overlay são implementadas, mas se concentra em como o Overlay funciona do ponto de vista de um serviço.
+
+    Pré-requisitos
+    -----------------
+
+        Este tutorial requer três hosts Docker físicos ou virtuais que podem se comunicar uns com os outros. Este tutorial presume que os três hosts estão sendo executados na mesma rede, sem nenhum firewall envolvido.
+
+        Esses hosts serão chamados de gerente, worker-1 e worker-2. O host gerenciador funcionará como um gerente e um worker, o que significa que ele pode executar tarefas de serviço e gerenciar o Swarm. worker-1 e worker-2 funcionarão apenas como workeres,
+
+        Se você não tiver três hosts à mão, uma solução fácil é configurar três hosts Ubuntu em um provedor de nuvem como Amazon EC2, todos na mesma rede com todas as comunicações permitidas a todos os hosts nessa rede (usando um mecanismo como Grupos de segurança EC2) e, em seguida, siga as instruções de instalação do Docker Engine - Comunidade no Ubuntu.
+
+
+    Passo a passo
+    ----------------
+
+    Crie o Swarm
+    ----------------
+
+        No final deste procedimento, todos os três hosts Docker serão unidos ao Swarm e serão conectados usando uma rede Overlay chamada ingress.
+
+            1. No gerente. inicializar o Swarm. Se o host tiver apenas uma interface de rede, o sinalizador --advertise-addr é opcional.
+
+                $ docker swarm init --advertise-addr=<IP-ADDRESS-OF-MANAGER>
+
+            Anote o texto impresso, pois ele contém o token que você usará para juntar o worker 1 e o worker 2 ao Swarm. É uma boa ideia armazenar o token em um gerenciador de senhas.
+
+            2. No worker-1, junte-se ao Swarm. Se o host tiver apenas uma interface de rede, o sinalizador --advertise-addr é opcional.
+
+                $ docker swarm join --token <TOKEN> \
+                    --advertise-addr <IP-ADDRESS-OF-WORKER-2> \
+                    <IP-ADDRESS-OF-MANAGER>:2377
+
+            3. No worker-2, junte-se ao Swarm. Se o host tiver apenas uma interface de rede, o sinalizador --advertise-addr é opcional.
+
+                $ docker swarm join --token <TOKEN> \
+                    --advertise-addr <IP-ADDRESS-OF-MANAGER>:2377
+
+            4. No gerenciador, liste todos os nós. Este comando só pode ser executado a partir de um gerente.
+
+                $ docker node ls
+
+            Você também pode usar o sinalizador --filter para filtrar por função:
+
+                $ docker node ls --filter role=manager
+
+                $ docker node ls --filter role=worker
+
+            5. Liste as redes Docker no gerenciador, worker-1 e worker-2 e observe que cada um deles agora tem uma rede Overlay chamada ingress e uma rede Bridge chamada docker_gwbridge. Apenas a lista do gerente é mostrada aqui:
+
+                $ docker network ls
+
+        O docker_gwbridge conecta a rede ingress à interface de rede do host Docker para que o tráfego possa fluir de e para os gerentes e worker do swarm. Se você criar serviços Swarm e não especificar uma rede, eles serão conectados à rede ingress. É recomendável usar redes Overlay separadas para cada aplicativo ou grupo de aplicativos que funcionarão juntos. No próximo procedimento, você criará duas redes Overlay e conectará um serviço a cada uma delas.
+
+
+        Crie os serviços
+        ------------------
+
+            1. No gerenciador, crie uma nova rede Overlay chamada nginx-net:
+
+                $ docker network create -d overlay nginx-net
+
+            Você não precisa criar a rede Overlay nos outros nós, porque ela será criada automaticamente quando um desses nós começar a executar uma tarefa de serviço que a exija.
+
+            2. No gerenciador, crie um serviço Nginx de 5 réplicas conectado ao nginx-net. O serviço publicará a porta 80 para o mundo exterior. Todos os contêineres de tarefas de serviço podem se comunicar sem abrir nenhuma porta.
+
+                Nota: Os serviços só podem ser criados em um gerente.
+
+                $ docker service create \
+                    --name container-nginx \
+                    --publish target=80,published=80 \
+                    --replicas=5 \
+                    --network nginx-net nginx
+
+            O modo de publicação padrão ingress, que é usado quando você não especifica um modo para a sinalização --publish, significa que se você navegar para a porta 80 no gerenciador, worker-1 ou worker-2, você será conectado à porta 80 em uma das 5 tarefas de serviço, mesmo se nenhuma tarefa estiver em execução no nó para o qual você está navegando. Se quiser publicar a porta usando o modo host, você pode adicionar mode=host à saída --publish. No entanto, você também deve usar --mode global em vez de --replicas=5 neste caso, uma vez que apenas uma tarefa de serviço pode ligar uma determinada porta em um determinado nó.
+
+                $ docker service create \
+                    --name container-nginx \
+                    --publish target=80,published=80 \
+                    --replicas=5 \
+                    --network nginx-net nginx
+
+            3. Execute docker service ls para monitorar o andamento da ativação do serviço, que pode levar alguns segundos.
+
+            4. Inspecione a rede nginx-net no gerenciador, worker-1 e worker-2. Lembre-se de que você não precisa criá-lo manualmente no worker-1 e no worker-2 porque o Docker o criou para você. A saída será longa, mas observe as seções Containers e Peers. Contêineres lista todas as tarefas de serviço (ou contêineres autônomos) conectadas à rede overlay desse host.
+
+            5. No gerenciador, inspecione o serviço usando o serviço docker, inspecione container-nginx e observe as informações sobre as portas e terminais usados pelo serviço.
+
+            6. Crie uma nova rede nginx-net-2 e atualize o serviço para usar esta rede em vez de nginx-net:
+
+                $ docker network create -d overlay nginx-net-2
+
+                $ docker service update \
+                    --network-add nginx-net-2 \
+                    --network-rm nginx-net  container-nginx
+
+            7. Execute docker service ls para verificar se o serviço foi atualizado e todas as tarefas foram reimplantadas. Execute docker network inspect nginx-net para verificar se nenhum contêiner está conectado a ele. Execute o mesmo comando para nginx-net-2 e observe que todos os contêineres de tarefas de serviço estão conectados a ele.
+
+            Observação: embora as redes Overlay sejam criadas automaticamente nos nós de trabalho do swarm conforme necessário, elas não são removidas automaticamente.
+
+            8. Limpe o serviço e as redes. No gerenciador, execute os seguintes comandos. O gerente irá direcionar os workers para remover as redes automaticamente.
+
+                $ docker service rm container-nginx
+
+                $ docker network rm nginx-net nginx-net-2
+
+        
+Use uma rede Overlay definida pelo usuário
+----------------------------------------------------
+
+    Pré-requisitos
+    -----------------
+
+        Este tutorial assume que o Swarm já está configurado e você está em um gerenciador.
+
+    Passo a Passo
+    --------------    
+
+        1. Crie a rede Overlay definida pelo usuário.
+
+            $ docker network create -d overlay rede01-orverlay
+
+        2. Inicie um serviço usando a rede Overlay e publicando a porta 80 na porta 8080 no host Docker.
+
+            $ docker service create --name container01-nginx \
+                --network rede01-overlay
+                --replicas 1 \
+                --publiush published=8080,target=80 nginx:latest
+
+        3. Execute docker network inspect rede01-overlay e verifique se a tarefa de serviço container01-nginx está conectada a ele, observando a seção Containers.
+
+        4. Remova o serviço e a rede.
+
+            $ docker service rm container01-nginx
+
+            $ docker network rm rede01-overlay
+
+
+Use uma rede Overlay para contêineres autônomos
+----------------------------------------------------------       
+
+    Este exemplo demonstra a descoberta de contêiner DNS - especificamente, como se comunicar entre contêineres autônomos em diferentes daemons do Docker usando uma rede Overlay. As etapas são:
+
+        - No host1, inicialize o nó como Swarm (gerenciador).
+
+        - No host2, junte o nó ao Swarm (Worker).
+
+        - No host1, crie uma rede Overlay conectável (test-net).
+
+        - No host1, execute um contêiner alpine interativo (container01-alpine) no test-net.
+
+        - No host2, execute um contêiner alpine interativo e separado (container02-alpine) na rede de teste.
+
+        - No host1, em uma sessão de container01-alpine, execute ping em container02-alpine.
+
+
+Pré-requisitos
+-----------------
+
+    Para este teste, você precisa de dois hosts Docker diferentes que possam se comunicar entre si. Cada host deve ter as seguintes portas abertas entre os dois hosts Docker:
+
+        - TCP port 2377
+
+        - TCP and UDP port 7946
+
+        - UDP port 4789
+ 
+    Uma maneira fácil de configurar isso é ter duas VMs (local ou em um provedor de nuvem como AWS), cada uma com o Docker instalado e em execução. Se você estiver usando AWS ou uma plataforma de computação em nuvem semelhante, a configuração mais fácil é usar um grupo de segurança que abre todas as portas de entrada entre os dois hosts e a porta SSH do endereço IP do seu cliente.
+
+    Este exemplo se refere aos dois nós em nosso Swarm como host1 e host2. Este exemplo também usa hosts Linux, mas os mesmos comandos funcionam no Windows.
+
+Passo a passo
+----------------
+
+    1. Prepare Swarm.
+
+        a. uma. No host1, inicialize um swarm (e se solicitado, use --advertise-addr para especificar o endereço IP para a interface que se comunica com outros hosts no swarm, por exemplo, o endereço IP privado no AWS):
+
+            $ docker swarm init
+
+        b. No host2, junte-se ao Swarm conforme as instruções acima:
+
+            $ docker swarm join --token <your_token> <yor_ip_address>:2377
+
+        Se o nó não conseguir se juntar ao swarm, o comando docker swarm join expira. Para resolver, execute docker swarm leave --force no host2, verifique as configurações de rede e firewall e tente novamente.
+
+    2. No host1, crie uma rede Overlay anexável chamada test-net:
+
+        $ docker network create --driver=overlay --attachable test-net
+
+    Observe o ID DE REDE retornado - você o verá novamente quando se conectar a ele a partir do host2.
+
+    3. No host1, inicie um contêiner interativo (-it) (container01-alpine) que se conecta à rede de teste:
+    
+        $ docker run -it --name container01-alpine --network test-net alpine
+
+    4. No host2, liste as redes disponíveis - observe que a test-net ainda não existe:
+
+        $ docker network ls
+
+    5. No host2, inicie um contêiner separado (-d) e interativo (-it) (container02-alpine) que se conecta à test-net:
+
+        $ docker run -dit --name container02-alpine --network test-net alpine
+
+    A descoberta automática de contêineres DNS funciona apenas com nomes de contêineres exclusivos.
+
+    6. No host2, verifique se test-net foi criado (e tem o mesmo NETWORK ID que test-net no host1):
+
+        $ docker network ls
+
+    7. No host1, execute ping container02-alpine no terminal interativo de container01-alpine:
+
+        $ ping -c 2 container02-alpine
+
+    Os dois contêineres se comunicam com a rede Overlay que conecta os dois hosts. Se você executar outro contêiner alpine no host2 que não está desconectado, você pode executar ping container01-alpine no host2 (e aqui adicionamos a opção de remoção para limpeza automática do contêiner):
+
+        $ docker run -it --rm --name container03-alpine --network test-net alpine
+
+            $ ping -c 2 container01-alpine
+
+            $ exit
+
+    8. No host1, feche a sessão container01-alpine (que também interrompe o contêiner):
+
+        $ exit
+
+    9. Limpe seus contêineres e redes:
+
+        Você deve parar e remover os contêineres em cada host independentemente, porque os daemons do Docker operam de forma independente e são contêineres autônomos. Você só precisa remover a rede no host1 porque quando você interrompe o container02-alpine no host2, o test-net desaparece.
+
+            a. uma. No host2, pare container02-alpine, verifique se test-net foi removido e, em seguida, remova container02-alpine:
+
+                $ docker container stop container02-alpine
+
+                $ docker network ls
+
+                $ docker container rm container02-alpine
+
+            b. uma. No host1, remova container01-alpine e test-net:
+
+                $ docker container rm container01-alpine
+
+                $ docker network rm test-net
+
+
+Comunique-se entre um contêiner e um serviço Swarm
+----------------------------------------------------       
+
+    Neste exemplo, você inicia dois contêineres alpines diferentes no mesmo host Docker e faz alguns testes para entender como eles se comunicam. Você precisa ter o Docker instalado e funcionando.
+
+        1. Abra uma janela de terminal. Liste as redes atuais antes de fazer qualquer outra coisa. Aqui está o que você deve ver se nunca adicionou uma rede ou inicializou um swarm neste daemon do Docker. Você pode ver redes diferentes, mas deve pelo menos ver estas (os IDs de rede serão diferentes):
+
+            $ docker network ls
+
+        A rede Bridge padrão é listada, junto com o host e nenhum. As duas últimas não são redes totalmente desenvolvidas, mas são usadas para iniciar um contêiner conectado diretamente à pilha de rede do host daemon do Docker ou para iniciar um contêiner sem dispositivos de rede. Este tutorial conectará dois contêineres à rede Bridge.
+
+        2. Inicie dois contêineres alpine executando ash, que é o shell padrão da Alpine em vez de bash. Os sinalizadores -dit significam iniciar o contêiner separado (em segundo plano), interativo (com a capacidade de digitar nele) e com um TTY (para que você possa ver a entrada e a saída). Como você o está iniciando desanexado, não será conectado ao contêiner imediatamente. Em vez disso, o ID do contêiner será impresso. Como você não especificou nenhum sinalizador --network, os contêineres se conectam à rede Bridge padrão.
+
+            $ docker run -dit --name container01-alpine alpine ash
+
+            $ docker run -dit --name container02-alpine alpine ash
+
+        Verifique se os dois contêineres foram realmente iniciados:
+
+            $ docker container ls
+
+        3. Inspecione a rede da ponte para ver quais contêineres estão conectados a ela.
+
+            $ docker network inspect bridge
+
+        Próximo ao topo, as informações sobre a rede Bridge são listadas, incluindo o endereço IP do gateway entre o host Docker e a rede Bridge (172.17.0.1). Na chave Containers, cada container conectado é listado, junto com informações sobre seu endereço IP (172.17.0.2 para container01-alpine e 172.17.0.3 para container02-alpine).
+
+        4. Os contêineres estão sendo executados em segundo plano. Use o comando docker attach para conectar-se a container01-alpine.
+
+            $ docker attach container01-alpine
+
+        O prompt muda para # para indicar que você é o usuário root no contêiner. Use o comando ip addr show para mostrar as interfaces de rede para container01-alpine conforme elas aparecem de dentro do contêiner:
+
+            # ip addr show
+
+        A primeira interface é o dispositivo de loopback. Ignore por enquanto. Observe que a segunda interface tem o endereço IP 172.17.0.2, que é o mesmo endereço mostrado para container01-alpine na etapa anterior.
+
+        5.  Em container01-alpine, verifique se você pode se conectar à Internet executando ping em google.com. O sinalizador -c 2 limita o comando a duas tentativas de ping.
+
+            $ ping -c 2 google.com
+
+        Isso é bem-sucedido. Em seguida, tente executar ping no contêiner container02-alpine pelo nome do contêiner. Isso vai falhar.
+
+            $ ping -c 2 container02-alpine
+
+        7. Desanexar de container01-alpine sem interrompê-lo usando a sequência de desanexação, CTRL + p CTRL + q (mantenha pressionada a tecla CTRL e digite p seguido de q). Se desejar, anexe a container02-alpine e repita as etapas 4, 5 e 6 lá, substituindo container01-alpine por container02-alpine.
+
+        8. Pare e remova os dois recipientes.
+
+            $ docker container stop container01-alpine container02-alpine
+
+        Lembre-se de que a rede de ponte padrão não é recomendada para produção. Para aprender sobre redes de ponte definidas pelo usuário, continue no próximo tutorial.

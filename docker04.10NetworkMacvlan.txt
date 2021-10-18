@@ -1,0 +1,100 @@
+Networking usando uma rede macvlan
+--------------------------------------
+
+    Esta série de tutoriais trata de contêineres autônomos de rede que se conectam a redes macvlan. Nesse tipo de rede, o host Docker aceita solicitações de vários endereços MAC em seu endereço IP e roteia essas solicitações para o contêiner apropriado. Para outros tópicos de rede, consulte a visão geral.
+
+
+Objetivo
+----------
+
+    O objetivo desses tutoriais é configurar uma rede macvlan com Bridge e anexar um contêiner a ela e, em seguida, configurar uma rede macvlan troncalizada 802.1q e conectar um contêiner a ela.
+
+
+Pré-requisitos
+-----------------
+
+    - A maioria dos provedores de nuvem bloqueia a rede macvlan. Você pode precisar de acesso físico ao seu equipamento de rede.
+
+    - O driver de rede macvlan funciona apenas em hosts Linux e não é compatível com Docker Desktop para Mac, Docker Desktop para Windows ou Docker EE para Windows Server.
+
+    - Você precisa de pelo menos a versão 3.9 do kernel Linux, e a versão 4.0 ou superior é recomendada.
+
+    - Os exemplos assumem que sua interface ethernet é eth0. Se o seu dispositivo tiver um nome diferente, use-o.
+
+
+Exemplo de Bridge
+-------------------
+
+    No exemplo de Bridge simples, seu tráfego flui por meio de eth0 e o Docker roteia o tráfego para seu contêiner usando seu endereço MAC. Para dispositivos de rede em sua rede, seu contêiner parece estar fisicamente conectado à rede.
+
+        1. Crie uma rede macvlan chamada minha-macvlan-net. Modifique a sub-rede, o gateway e os valores pai para valores que façam sentido em seu ambiente.
+
+            $ docker network create -d macvlan \
+                --subnet=172.16.86.0/24 \
+                --gateway=172.16.86.1 \
+                -o parent=eth0 \
+                minha-macvlan-net
+
+        Você pode usar os comandos docker network ls e docker network inspect minha-macvlan-net para verificar se a rede existe e é uma rede macvlan.
+
+        2. Inicie um contêiner alpine e conecte-o à rede minha-macvlan-net. Os sinalizadores -dit iniciam o contêiner em segundo plano, mas permitem que você anexe a ele. O sinalizador --rm significa que o contêiner é removido quando é interrompido.
+
+            $ docker run --rm -dit \
+                --network minha-macvlan-net \
+                --name container01-macvlan-alpine \
+                alpine:latest ash
+
+        3. Inspecione o contêiner container01-macvlan-alpine e observe a chave MacAddress na chave Networks:
+
+            $ docker container inspect container01-macvlan-alpine
+
+        4. Verifique como o contêiner vê suas próprias interfaces de rede executando alguns comandos docker exec.
+
+            $ docker exec container01-macvlan-alpine ip addr show eth0
+
+            docker exec container01-macvlan-alpine ip route
+
+        5. Pare o contêiner (o Docker o remove por causa do sinalizador --rm) e remova a rede.
+
+            $ docker container stop container01-macvlan-alpine
+
+            $ docker network rm minha-macvlan-net
+
+
+Exemplo Bridge troncalizada 802.1q
+-------------------------------------
+
+    No exemplo Bridge troncalizada 802.1q, seu tráfego flui por meio de uma subinterface de eth0 (chamada de eth0.10) e o Docker roteia o tráfego para seu contêiner usando seu endereço MAC. Para dispositivos de rede em sua rede, seu contêiner parece estar fisicamente conectado à rede.
+
+        1. Crie uma rede macvlan chamada minha-8021q-macvlan-net. Modifique a sub-rede, o gateway e os valores pai para valores que façam sentido em seu ambiente.
+
+            $ docker network create -d macvlan \
+                --subnet=172.16.86.0/24 \
+                --gateway=172.16.86.1 \
+                -o parent=eth0.10 \
+                minha-8021q-macvlan-net
+
+        Você pode usar os comandos docker network ls e docker network inspect minha-8021q-macvlan-net para verificar se a rede existe, é uma rede macvlan e tem o pai eth0.10. Você pode usar ip addr show no host Docker para verificar se a interface eth0.10 existe e tem um endereço IP separado
+
+        2. Inicie um contêiner alpino e conecte-o à rede my-8021q-macvlan-net. Os sinalizadores -dit iniciam o contêiner em segundo plano, mas permitem que você anexe a ele. O sinalizador --rm significa que o contêiner é removido quando é interrompido.
+
+            $ docker run --rm -dit \
+                --network minha-8021q-macvlan-net \
+                --name container02-macvlan-alpine \
+                alpine:latest ash
+
+        3. Inspecione o contêiner container02-macvlan-alpine e observe a chave MacAddress na chave Networks:
+
+            $ docker container inspect container02-macvlan-alpine
+
+        4. Verifique como o contêiner vê suas próprias interfaces de rede executando alguns comandos docker exec.
+
+            $ docker exec container02-macvlan-alpine ip addr show eth0
+
+            $ docker exec container02-macvlan-alpine ip route
+
+        5. Pare o contêiner (o Docker o remove por causa do sinalizador --rm) e remova a rede.
+
+            $ docker container stop container02-macvlan-alpine
+
+            $ docker network rm minha-8021q-macvlan-net
